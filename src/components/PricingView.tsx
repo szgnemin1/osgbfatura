@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Plus, Trash, Check, HelpCircle, Save, Info } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Plus, Trash, Check, HelpCircle, Save, Info, Search } from 'lucide-react';
 import { Firm, PricingModel, PricingModelType, KademeRange } from '../types';
 
 interface PricingViewProps {
@@ -10,6 +10,7 @@ interface PricingViewProps {
 
 export default function PricingView({ firms, onSaveFirm, onAddFirm }: PricingViewProps) {
   const [selectedFirmId, setSelectedFirmId] = useState<string>(firms[0]?.id || '');
+  const [listSearchTerm, setListSearchTerm] = useState('');
   const [newFirmName, setNewFirmName] = useState('');
   const [newFirmInvoiceType, setNewFirmInvoiceType] = useState<'efatura' | 'earsiv'>('efatura');
   const [newFirmGroup, setNewFirmGroup] = useState('Genel');
@@ -202,6 +203,16 @@ export default function PricingView({ firms, onSaveFirm, onAddFirm }: PricingVie
     setNewFirmCustomGroupInput('');
     setIsAddingFirm(false);
   };
+
+  // Filter firms by search term
+  const filteredFirms = useMemo(() => {
+    if (!listSearchTerm.trim()) return firms;
+    const term = listSearchTerm.toLocaleLowerCase('tr');
+    return firms.filter(f => 
+      f.name.toLocaleLowerCase('tr').includes(term) ||
+      (f.groupName && f.groupName.toLocaleLowerCase('tr').includes(term))
+    );
+  }, [firms, listSearchTerm]);
 
   return (
     <div className="space-y-6" id="pricing-container">
@@ -619,47 +630,73 @@ export default function PricingView({ firms, onSaveFirm, onAddFirm }: PricingVie
 
       {/* Firma Listesi (Company List) under parameters */}
       <div className="space-y-3 pt-4 border-t border-neutral-800/60" id="firm-list-under-parameters">
-        <div className="flex items-center justify-between px-1">
-          <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Save className="h-4.5 w-4.5 text-indigo-400" />
-            Firma Listesi
-          </h2>
-          <button
-            type="button"
-            onClick={() => setIsAddingFirm(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-xl text-xs font-semibold transition-colors cursor-pointer animate-fade-in"
-            id="btn-add-firm-open"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Yeni Firma Ekle
-          </button>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
+          <div className="flex items-center gap-3">
+            <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <Save className="h-4 w-4 text-indigo-400" />
+              Firma Listesi ({filteredFirms.length})
+            </h2>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Live Search Bar */}
+            <div className="relative min-w-[220px]">
+              <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-neutral-500" />
+              <input
+                type="text"
+                placeholder="Firma veya grup ara..."
+                value={listSearchTerm}
+                onChange={(e) => setListSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 text-xs bg-neutral-900 border border-neutral-800 text-white rounded-xl focus:outline-hidden focus:border-indigo-500"
+              />
+              {listSearchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setListSearchTerm('')}
+                  className="absolute right-2.5 top-2 text-[10px] text-neutral-500 hover:text-white"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsAddingFirm(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-xl text-xs font-semibold transition-colors cursor-pointer shrink-0"
+              id="btn-add-firm-open"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Ekle
+            </button>
+          </div>
         </div>
 
         {/* Add Firm Inline Form */}
         {isAddingFirm && (
-          <form onSubmit={handleAddNewFirmSubmit} className="bg-[#0a0a0a] p-5 rounded-2xl border border-neutral-800 space-y-4 max-w-lg animate-fade-in" id="new-firm-form">
+          <form onSubmit={handleAddNewFirmSubmit} className="bg-[#0a0a0a] p-4 rounded-xl border border-neutral-800 space-y-3 max-w-lg animate-fade-in" id="new-firm-form">
             <h3 className="text-xs font-bold text-white uppercase tracking-wider">Yeni Firma Ekle</h3>
             
             <div>
-              <label className="block text-[11px] font-semibold text-neutral-400 mb-1">Firma Unvanı</label>
+              <label className="block text-[10px] font-semibold text-neutral-400 mb-1">Firma Unvanı</label>
               <input
                 type="text"
                 placeholder="Firma Unvanı girin..."
                 value={newFirmName}
                 onChange={(e) => setNewFirmName(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-neutral-900 border border-neutral-800 text-white rounded-xl focus:outline-hidden focus:border-indigo-500"
+                className="w-full px-3 py-1.5 text-xs bg-neutral-900 border border-neutral-800 text-white rounded-lg focus:outline-hidden focus:border-indigo-500"
                 required
                 autoFocus
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
-                <label className="block text-[11px] font-semibold text-neutral-400 mb-1">Fatura Tipi</label>
+                <label className="block text-[10px] font-semibold text-neutral-400 mb-1">Fatura Tipi</label>
                 <select
                   value={newFirmInvoiceType}
                   onChange={(e) => setNewFirmInvoiceType(e.target.value as 'efatura' | 'earsiv')}
-                  className="w-full px-3 py-2 text-xs bg-neutral-900 border border-neutral-800 text-white rounded-xl focus:outline-hidden focus:border-indigo-500 font-medium"
+                  className="w-full px-2.5 py-1.5 text-xs bg-neutral-900 border border-neutral-800 text-white rounded-lg focus:outline-hidden focus:border-indigo-500 font-medium"
                 >
                   <option value="efatura">e-Fatura</option>
                   <option value="earsiv">e-Arşiv</option>
@@ -667,15 +704,15 @@ export default function PricingView({ firms, onSaveFirm, onAddFirm }: PricingVie
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-neutral-400 mb-1">Firma Grubu</label>
+                <label className="block text-[10px] font-semibold text-neutral-400 mb-1">Firma Grubu</label>
                 {isNewFirmCustomGroup ? (
-                  <div className="flex gap-1.5">
+                  <div className="flex gap-1">
                     <input
                       type="text"
                       placeholder="Yeni Grup Adı..."
                       value={newFirmCustomGroupInput}
                       onChange={(e) => setNewFirmCustomGroupInput(e.target.value)}
-                      className="w-full px-2.5 py-2 text-xs bg-neutral-900 border border-neutral-800 text-white rounded-xl focus:outline-hidden focus:border-indigo-500"
+                      className="w-full px-2 py-1.5 text-xs bg-neutral-900 border border-neutral-800 text-white rounded-lg focus:outline-hidden focus:border-indigo-500"
                       required
                     />
                     <button
@@ -697,12 +734,12 @@ export default function PricingView({ firms, onSaveFirm, onAddFirm }: PricingVie
                         setNewFirmGroup(e.target.value);
                       }
                     }}
-                    className="w-full px-3 py-2 text-xs bg-neutral-900 border border-neutral-800 text-white rounded-xl focus:outline-hidden focus:border-indigo-500 font-medium cursor-pointer"
+                    className="w-full px-2.5 py-1.5 text-xs bg-neutral-900 border border-neutral-800 text-white rounded-lg focus:outline-hidden focus:border-indigo-500 font-medium cursor-pointer"
                   >
                     {existingGroups.map(grp => (
                       <option key={grp} value={grp}>{grp}</option>
                     ))}
-                    <option value="__NEW__">+ Yeni Grup Oluştur...</option>
+                    <option value="__NEW__">+ Yeni Grup...</option>
                   </select>
                 )}
               </div>
@@ -712,50 +749,65 @@ export default function PricingView({ firms, onSaveFirm, onAddFirm }: PricingVie
               <button
                 type="button"
                 onClick={() => setIsAddingFirm(false)}
-                className="px-3.5 py-1.5 text-xs text-neutral-400 hover:text-neutral-200 bg-neutral-800 hover:bg-neutral-750 border border-neutral-700 rounded-lg font-medium cursor-pointer"
+                className="px-3 py-1 text-xs text-neutral-400 hover:text-neutral-200 bg-neutral-800 rounded-md font-medium cursor-pointer"
               >
                 İptal
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-550 text-white rounded-lg font-semibold cursor-pointer shadow-xs"
+                className="px-3.5 py-1 text-xs bg-emerald-600 hover:bg-emerald-550 text-white rounded-md font-semibold cursor-pointer shadow-xs"
               >
-                Firma Ekle
+                Kaydet
               </button>
             </div>
           </form>
         )}
 
-        {/* Firms Selection Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" id="pricing-firm-grid">
-          {firms.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => setSelectedFirmId(f.id)}
-              className={`w-full text-left p-4 rounded-2xl text-xs font-medium transition-all border ${
-                selectedFirmId === f.id
-                  ? 'bg-indigo-600/15 text-indigo-400 border-indigo-500 shadow-sm ring-1 ring-indigo-500/20'
-                  : 'bg-neutral-900/50 text-neutral-450 hover:bg-neutral-900 hover:text-white border-neutral-800'
-              }`}
-            >
-              <div className="font-semibold truncate text-white text-sm mb-1.5">{f.name}</div>
-              <div className="flex flex-wrap gap-1.5 text-[10px] text-neutral-500 font-bold uppercase">
-                <span className="bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-md border border-indigo-500/20">
-                  {f.groupName || 'Genel'}
-                </span>
-                <span className="bg-neutral-850 px-2 py-0.5 rounded-md border border-neutral-800">
-                  {f.invoiceType === 'efatura' ? 'e-Fatura' : 'e-Arşiv'}
-                </span>
-                <span className="bg-neutral-850 px-2 py-0.5 rounded-md border border-neutral-800 capitalize">
-                  {f.pricingModel.type === 'standart' ? 'Standart' : f.pricingModel.type === 'toleransli' ? 'Toleranslı' : f.pricingModel.type === 'kademeli' ? 'Kademeli' : 'Yıllık'}
-                </span>
-                <span className="bg-neutral-850 px-2 py-0.5 rounded-md border border-neutral-800">
-                  {f.isVatIncluded ? 'KDV Dahil' : 'KDV Hariç'}
-                </span>
-              </div>
-            </button>
-          ))}
+        {/* Firms Selection List (Vertical) */}
+        <div className="bg-[#111111] rounded-2xl border border-neutral-800 overflow-hidden" id="pricing-firm-list">
+          {filteredFirms.length > 0 ? (
+            <div className="divide-y divide-neutral-900">
+              {filteredFirms.map((f) => {
+                const isSelected = selectedFirmId === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setSelectedFirmId(f.id)}
+                    className={`w-full text-left px-4 py-2.5 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer ${
+                      isSelected
+                        ? 'bg-indigo-600/15 border-l-4 border-indigo-500 text-white font-medium'
+                        : 'hover:bg-neutral-900/50 text-neutral-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? 'bg-indigo-400' : 'bg-neutral-700'}`} />
+                      <span className="font-semibold text-xs text-white truncate">{f.name}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                      <span className="bg-indigo-500/10 text-indigo-400 text-[9px] font-bold px-2 py-0.5 rounded border border-indigo-500/20">
+                        {f.groupName || 'Genel'}
+                      </span>
+                      <span className="bg-neutral-900 text-neutral-400 text-[9px] font-medium px-2 py-0.5 rounded border border-neutral-800">
+                        {f.invoiceType === 'efatura' ? 'e-Fatura' : 'e-Arşiv'}
+                      </span>
+                      <span className="bg-neutral-900 text-neutral-400 text-[9px] font-medium px-2 py-0.5 rounded border border-neutral-800 capitalize">
+                        {f.pricingModel.type === 'standart' ? 'Standart' : f.pricingModel.type === 'toleransli' ? 'Toleranslı' : f.pricingModel.type === 'kademeli' ? 'Kademeli' : 'Yıllık'}
+                      </span>
+                      <span className="bg-neutral-900 text-neutral-400 text-[9px] font-medium px-2 py-0.5 rounded border border-neutral-800">
+                        {f.isVatIncluded ? 'KDV Dahil' : 'KDV Hariç'}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="p-6 text-center text-xs text-neutral-500 font-medium">
+              Arama kriterlerine uygun firma bulunamadı.
+            </div>
+          )}
         </div>
       </div>
     </div>

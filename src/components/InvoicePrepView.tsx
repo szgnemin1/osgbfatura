@@ -51,6 +51,7 @@ export default function InvoicePrepView({
     newEmployeeCount: number;
   }[]>([]);
   const [showUpdatedEmployeesModal, setShowUpdatedEmployeesModal] = useState<boolean>(false);
+  const [showEmployeeImportModal, setShowEmployeeImportModal] = useState<boolean>(false);
 
   // VPS & Integration States
   const [activeIntegrationTab, setActiveIntegrationTab] = useState<'employee' | 'health'>('employee');
@@ -1449,13 +1450,36 @@ export default function InvoicePrepView({
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleBatchInvoiceGroup}
-                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-950/40 cursor-pointer shrink-0"
-                >
-                  ⚡ {selectedGroup === 'all' ? 'Tüm Gösterilenleri Faturalaştır' : `"${selectedGroup}" Grubunu Faturalaştır`} ({filteredFirms.length})
-                </button>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleSyncFromVpsApi}
+                    disabled={isSyncingApi}
+                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-950/40 cursor-pointer shrink-0"
+                    title="Otomasyondan gelen sağlık tetkik verilerini çek, eşleşen firmalara yaz ve eşleşmeyenleri sor"
+                  >
+                    <Activity className={`h-3.5 w-3.5 text-teal-300 ${isSyncingApi ? 'animate-spin' : ''}`} />
+                    {isSyncingApi ? 'İşleniyor...' : 'Sağlık Tetkiki'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowEmployeeImportModal(true)}
+                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-neutral-800 hover:bg-neutral-700 text-emerald-400 border border-neutral-700 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer shrink-0"
+                    title="Excel yükleyerek veya yapıştırarak çalışan sayılarını aktarın"
+                  >
+                    <Users className="h-3.5 w-3.5 text-emerald-400" />
+                    Çalışan Sayıları
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleBatchInvoiceGroup}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-950/40 cursor-pointer shrink-0"
+                  >
+                    ⚡ {selectedGroup === 'all' ? 'Tüm Gösterilenleri Faturalaştır' : `"${selectedGroup}" Grubunu Faturalaştır`} ({filteredFirms.length})
+                  </button>
+                </div>
               </div>
 
               <div className="flex flex-wrap gap-2 items-center">
@@ -1512,449 +1536,7 @@ export default function InvoicePrepView({
         )}
       </div>
 
-      {/* Excel / VPS Entegrasyonu Kartı (Açılır - Kapanır) */}
-      <div className="bg-[#0a0a0a] rounded-2xl border border-neutral-800 shadow-xs overflow-hidden" id="template-integration-card">
-        {/* Header - Clickable for open / close */}
-        <div 
-          onClick={() => setIsIntegrationOpen(prev => !prev)}
-          className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-neutral-900/40 transition-colors select-none"
-        >
-          <div className="flex items-center gap-2.5">
-            <FileSpreadsheet className="h-5 w-5 text-emerald-400 shrink-0" />
-            <div>
-              <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                Veri Entegrasyonu & Şablonlar
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                  isIntegrationOpen 
-                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
-                    : 'bg-neutral-800 text-neutral-400 border-neutral-700'
-                }`}>
-                  {isIntegrationOpen ? 'Açık' : 'Kapanmış (Tıklayıp Açın)'}
-                </span>
-              </h2>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-            {/* Tab switcher */}
-            <div className="flex bg-neutral-900 border border-neutral-800 p-1 rounded-xl">
-              <button
-                onClick={() => {
-                  setActiveIntegrationTab('employee');
-                  setIsIntegrationOpen(true);
-                }}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeIntegrationTab === 'employee'
-                    ? 'bg-neutral-800 text-emerald-400 shadow-xs'
-                    : 'text-neutral-400 hover:text-neutral-200'
-                }`}
-              >
-                <Users className="h-3.5 w-3.5" />
-                Çalışan Sayıları
-              </button>
-              <button
-                onClick={() => {
-                  setActiveIntegrationTab('health');
-                  setIsIntegrationOpen(true);
-                }}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeIntegrationTab === 'health'
-                    ? 'bg-neutral-800 text-teal-400 shadow-xs'
-                    : 'text-neutral-400 hover:text-neutral-200'
-                }`}
-              >
-                <Activity className="h-3.5 w-3.5" />
-                Sağlık Verileri
-              </button>
-            </div>
 
-
-
-            {/* Collapse toggle icon button */}
-            <button
-              type="button"
-              onClick={() => setIsIntegrationOpen(prev => !prev)}
-              className="p-1.5 bg-neutral-900 border border-neutral-800 rounded-xl text-neutral-300 hover:text-white transition-colors cursor-pointer ml-1"
-            >
-              {isIntegrationOpen ? <ChevronUp className="h-4 w-4 text-emerald-400" /> : <ChevronDown className="h-4 w-4 text-neutral-400" />}
-            </button>
-          </div>
-        </div>
-
-        {/* Collapsible Content Body */}
-        {isIntegrationOpen && (
-          <div className="p-4 sm:p-6 border-t border-neutral-800/80 space-y-4 animate-fade-in">
-            {activeIntegrationTab === 'employee' ? (
-              /* Çalışan Sayıları Import UI */
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <div className="bg-[#111111] p-4 rounded-xl border border-neutral-800 flex flex-col justify-between space-y-3">
-                    <div>
-                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block mb-1">Seçenek 1: Excel (.xlsx / .xls) / CSV Yükle</span>
-                      <p className="text-xs text-neutral-400 font-medium leading-relaxed">
-                        İçerisinde <strong className="text-emerald-400 font-bold">Hizmet Alan İşyeri Unvanı</strong> ve <strong className="text-emerald-400 font-bold">Hizmet Alan İşyeri Çalışan Sayısı</strong> başlığı olan Excel dosyanızı yükleyin.
-                      </p>
-                    </div>
-                    
-                    <div className="relative border-2 border-dashed border-neutral-800 hover:border-emerald-500/40 rounded-xl p-4 transition-colors flex flex-col items-center justify-center min-h-[100px] cursor-pointer bg-neutral-950/30 group">
-                      <input
-                        type="file"
-                        accept=".xlsx,.xls,.csv,.txt"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleExcelFileUpload(file);
-                          e.target.value = '';
-                        }}
-                        className="absolute inset-0 opacity-0 cursor-pointer"
-                      />
-                      <Upload className="h-6 w-6 text-emerald-400/80 group-hover:text-emerald-400 mb-1 transition-colors" />
-                      <span className="text-xs font-semibold text-neutral-300 group-hover:text-white transition-colors">Excel (.xlsx/.xls) Dosyası Seçin / Sürükleyin</span>
-                      <span className="text-[10px] text-neutral-500 mt-0.5">Aynı unvanlar varsa çalışan sayıları toplanarak eşleştirilir</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-[#111111] p-4 rounded-xl border border-neutral-800 flex flex-col justify-between space-y-3">
-                    <div>
-                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block mb-1">Seçenek 2: Excel'den Kopyala-Yapıştır</span>
-                    </div>
-
-                    <div className="space-y-2.5">
-                      <textarea
-                        value={pastedText}
-                        onChange={(e) => setPastedText(e.target.value)}
-                        placeholder="Excel satırlarını buraya yapıştırın (Örn: Firma Unvanı    Çalışan Sayısı...)"
-                        rows={2}
-                        className="w-full p-2.5 bg-neutral-950 border border-neutral-800 rounded-lg text-xs font-mono text-neutral-300 focus:outline-hidden focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 placeholder:text-neutral-700 resize-y"
-                      />
-                      <div className="flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (pastedText.trim()) {
-                              parseUploadedText(pastedText);
-                            } else {
-                              alert("Lütfen kopyaladığınız Excel verisini kutucuğa yapıştırın.");
-                            }
-                          }}
-                          className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black font-bold rounded-lg text-xs transition-all shadow-sm shadow-emerald-500/20 flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
-                        >
-                          <Sparkles className="h-3.5 w-3.5" />
-                          ⚡ Kopyalanan Verileri Aktar
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              /* Sağlık Verileri Entegrasyonu (Anlık Mesaj & Webhook Akışı) */
-              <div className="space-y-4">
-                {/* Header Info Banner */}
-                <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-2.5 text-indigo-200 font-semibold">
-                    <div className="p-1.5 bg-indigo-500/20 text-indigo-400 rounded-lg">
-                      <Send className="h-4 w-4" />
-                    </div>
-                    <span>⚡ Anlık Sağlık Mesajları Entegrasyonu (Diğer Otomasyondan Gelen Canlı Bildirimler)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const devText = `Merhaba,\n\nSağlık otomasyonunuzda bir fatura kesildiğinde aşağıdaki adrese POST mesajı göndermeniz yeterlidir:\n\nURL: ${typeof window !== 'undefined' ? window.location.origin : 'https://app.domain.com'}/api/health-sync\nMethod: POST\nHeader: Content-Type: application/json\nHeader: Authorization: Bearer ${vpsApiKey || 'vps_secure_secret_2026'}\n\nBody Örneği:\n{\n  "firmName": "Firma Unvanı",\n  "paymentType": "fatura",\n  "amount": 1850.00\n}\n\nBu mesaj gönderildiği an fatura hazırlama ekranında otomatik canlı bildirim düşer ve tutar faturaya yansır.`;
-                        navigator.clipboard.writeText(devText);
-                        setCopiedDevNote(true);
-                        setTimeout(() => setCopiedDevNote(false), 2500);
-                      }}
-                      className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                    >
-                      {copiedDevNote ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Copy className="h-3.5 w-3.5" />}
-                      {copiedDevNote ? 'Yazılımcı Notu Kopyalandı!' : '🤝 Yazılımcı İletişim Notunu Kopyala'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowWebhookModal(true)}
-                      className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border border-neutral-700 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <FileCode className="h-3.5 w-3.5 text-indigo-400" />
-                      Kod Örnekleri
-                    </button>
-                  </div>
-                </div>
-
-                {/* Main Grid: Live Messages Stream + Quick Message Paste / Test */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-                  {/* Left Column: Live Message Stream (7 cols) */}
-                  <div className="lg:col-span-7 bg-[#111115] p-4 rounded-2xl border border-indigo-500/30 flex flex-col justify-between space-y-3 shadow-xl">
-                    <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5">
-                      <div className="flex items-center gap-2">
-                        <span className="relative flex h-2.5 w-2.5">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                        </span>
-                        <span className="text-xs font-bold text-white uppercase tracking-wider">
-                          📬 Gelen Canlı Sağlık Mesajları ({liveHealthMessages.length})
-                        </span>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={fetchLiveHealthMessages}
-                        disabled={isFetchingLiveMessages}
-                        className="text-neutral-400 hover:text-white text-xs flex items-center gap-1 font-medium transition-colors cursor-pointer"
-                      >
-                        <RefreshCw className={`h-3 w-3 ${isFetchingLiveMessages ? 'animate-spin text-indigo-400' : ''}`} />
-                        Yenile
-                      </button>
-                    </div>
-
-                    {/* Messages List Stream */}
-                    <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                      {liveHealthMessages.length === 0 ? (
-                        <div className="p-6 text-center text-xs text-neutral-500 font-medium bg-neutral-950/60 rounded-xl border border-neutral-900">
-                          Henüz gelen canlı sağlık mesajı bulunmuyor.<br/>Diğer sistemden mesaj gönderildiğinde burada anında görünecektir.
-                        </div>
-                      ) : (
-                        liveHealthMessages.map((msg) => (
-                          <div key={msg.id} className="p-3 bg-neutral-950/80 hover:bg-neutral-900 border border-neutral-800 hover:border-indigo-500/40 rounded-xl flex items-center justify-between gap-3 transition-all">
-                            <div className="flex items-start gap-2.5 min-w-0">
-                              <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-lg border border-indigo-500/20 shrink-0 mt-0.5">
-                                <Send className="h-3.5 w-3.5" />
-                              </div>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-bold text-white truncate">{msg.firmName}</span>
-                                  <span className="text-[10px] text-neutral-500 font-mono shrink-0">{msg.timestamp}</span>
-                                </div>
-                                <span className="text-[11px] text-emerald-400 font-mono font-bold block">
-                                  {formatLira(msg.amount)} <span className="text-[9px] text-neutral-400 font-sans">(Fatura)</span>
-                                </span>
-                              </div>
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                markMessagesAsProcessed([msg.id]);
-                                const matched = findMatchingFirm(msg.firmName);
-                                if (matched) {
-                                  setFirmInputs(prev => ({
-                                    ...prev,
-                                    [matched.id]: {
-                                      ...prev[matched.id],
-                                      healthAmount: (prev[matched.id]?.healthAmount || 0) + msg.amount
-                                    }
-                                  }));
-                                  alert(`✅ MESAJ FATURAYA AKTARILDI & İŞLENDİ!\n\n"${msg.firmName}" firmasına ${formatLira(msg.amount)} fatura tutarı eklendi. Bu veri işlendi olarak işaretlendi ve listeden kaldırıldı.`);
-                                } else {
-                                  setHealthUnmatchedQueue([{ rawName: msg.firmName, amount: msg.amount }]);
-                                  setCurrentHealthUnmatchedIndex(0);
-                                  setNewHealthFirmName(msg.firmName);
-                                  setSelectedMatchFirmId(sortedFirms[0]?.id || '');
-                                  setHealthMatchAction('existing');
-                                  setShowHealthMappingModal(true);
-                                }
-                              }}
-                              className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-bold transition-all shrink-0 cursor-pointer shadow-sm flex items-center gap-1"
-                            >
-                              <Check className="h-3 w-3 text-emerald-300" />
-                              Faturaya Aktar
-                            </button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-
-                    {/* Action Footer */}
-                    <div className="pt-2 border-t border-neutral-800 flex items-center justify-between">
-                      <span className="text-[10px] text-neutral-500 font-mono">Endpoint: POST /api/health-sync</span>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (liveHealthMessages.length === 0) {
-                            alert("ℹ️ İşlenecek yeni canlı sağlık mesajı bulunmuyor.");
-                            return;
-                          }
-                          const msgIdsToProcess = liveHealthMessages.map(m => m.id);
-                          const newInputs = { ...firmInputs };
-                          const unmatchedList: { rawName: string; amount: number }[] = [];
-                          let updatedCount = 0;
-                          let totalSum = 0;
-
-                          liveHealthMessages.forEach(msg => {
-                            const matched = findMatchingFirm(msg.firmName);
-                            if (matched) {
-                              newInputs[matched.id] = {
-                                ...newInputs[matched.id],
-                                healthAmount: (newInputs[matched.id]?.healthAmount || 0) + msg.amount
-                              };
-                              updatedCount++;
-                              totalSum += msg.amount;
-                            } else {
-                              unmatchedList.push({ rawName: msg.firmName, amount: msg.amount });
-                            }
-                          });
-
-                          if (updatedCount > 0) {
-                            setFirmInputs(newInputs);
-                          }
-
-                          await markMessagesAsProcessed(msgIdsToProcess);
-
-                          if (unmatchedList.length > 0) {
-                            setHealthUnmatchedQueue(unmatchedList);
-                            setCurrentHealthUnmatchedIndex(0);
-                            const firstUnmatched = unmatchedList[0];
-                            setNewHealthFirmName(firstUnmatched.rawName);
-                            setSelectedMatchFirmId(sortedFirms[0]?.id || '');
-                            setHealthMatchAction('existing');
-                            setShowHealthMappingModal(true);
-                          }
-
-                          alert(`✅ TÜM MESAJLAR FATURAYA AKTARILDI & İŞLENDİ!\n\n• Toplam ${msgIdsToProcess.length} canlı mesaj işlendi ve akıştan temizlendi.\n• Eşleşen firmaların faturasına ${formatLira(totalSum)} aktarıldı.${unmatchedList.length > 0 ? `\n• Eşleşmeyen ${unmatchedList.length} firma için eşleştirme penceresi açıldı.` : ''}`);
-                        }}
-                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-all shadow-md shadow-emerald-950/30 flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Sparkles className="h-3.5 w-3.5" />
-                        ⚡ Gelen Tüm Mesajları Faturaya Aktar
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Right Column: Instant Message Tester & Paste Area (5 cols) */}
-                  <div className="lg:col-span-5 space-y-3">
-                    {/* Test / Send Live Message Form */}
-                    <div className="bg-[#111115] p-3.5 rounded-2xl border border-neutral-800 space-y-2.5">
-                      <span className="text-[11px] font-bold text-indigo-300 uppercase tracking-wider block">
-                        🧪 Canlı Mesaj Simülatörü (Test Et)
-                      </span>
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="text"
-                          placeholder="Firma Unvanı (Örn: ABC Sağlık)"
-                          value={webhookTestFirm}
-                          onChange={(e) => setWebhookTestFirm(e.target.value)}
-                          className="px-2.5 py-1.5 bg-neutral-950 border border-neutral-800 text-xs text-white rounded-lg focus:outline-none focus:border-indigo-500"
-                        />
-                        <input
-                          type="number"
-                          placeholder="Tutar TL (Örn: 1500)"
-                          value={webhookTestAmount}
-                          onChange={(e) => setWebhookTestAmount(e.target.value)}
-                          className="px-2.5 py-1.5 bg-neutral-950 border border-neutral-800 text-xs text-white rounded-lg focus:outline-none focus:border-indigo-500 font-mono"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        disabled={isSendingWebhookTest}
-                        onClick={async () => {
-                          if (!webhookTestFirm.trim() || !webhookTestAmount || Number(webhookTestAmount) <= 0) {
-                            alert("Lütfen geçerli bir firma unvanı ve tutar girin.");
-                            return;
-                          }
-                          setIsSendingWebhookTest(true);
-                          try {
-                            const res = await fetch('/api/health-sync', {
-                              method: 'POST',
-                              headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${vpsApiKey || 'vps_secure_secret_2026'}`
-                              },
-                              body: JSON.stringify({
-                                records: [
-                                  {
-                                    firmName: webhookTestFirm.trim(),
-                                    paymentType: 'fatura',
-                                    amount: Number(webhookTestAmount)
-                                  }
-                                ]
-                              })
-                            });
-                            const data = await res.json();
-                            if (data.success) {
-                              fetchLiveHealthMessages();
-                              const amt = Number(webhookTestAmount);
-                              const rawName = webhookTestFirm.trim();
-                              const matched = findMatchingFirm(rawName);
-
-                              if (matched) {
-                                setFirmInputs(prev => ({
-                                  ...prev,
-                                  [matched.id]: {
-                                    ...prev[matched.id],
-                                    healthAmount: (prev[matched.id]?.healthAmount || 0) + amt
-                                  }
-                                }));
-                                alert(`✅ CANLI MESAJ ALINDI!\n\n"${rawName}" firmasına ${formatLira(amt)} başarıyla eklendi ve faturanıza aktarıldı.`);
-                              } else {
-                                setHealthUnmatchedQueue([{ rawName, amount: amt }]);
-                                setCurrentHealthUnmatchedIndex(0);
-                                setNewHealthFirmName(rawName);
-                                setSelectedMatchFirmId(sortedFirms[0]?.id || '');
-                                setHealthMatchAction('existing');
-                                setShowHealthMappingModal(true);
-                              }
-                              setWebhookTestFirm('');
-                              setWebhookTestAmount('');
-                            }
-                          } catch (err) {
-                            alert("❌ Mesaj gönderilemedi.");
-                          } finally {
-                            setIsSendingWebhookTest(false);
-                          }
-                        }}
-                        className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                      >
-                        <Send className="h-3.5 w-3.5" />
-                        {isSendingWebhookTest ? 'Gönderiliyor...' : 'Örnek Mesaj Gönder (Test)'}
-                      </button>
-                    </div>
-
-                    {/* Paste Text / WhatsApp Message */}
-                    <div className="bg-[#111115] p-3.5 rounded-2xl border border-neutral-800 space-y-2">
-                      <span className="text-[11px] font-bold text-teal-300 uppercase tracking-wider block">
-                        📝 Mesaj / Metin Yapıştır
-                      </span>
-                      <textarea
-                        value={simpleHealthMessageText}
-                        onChange={(e) => setSimpleHealthMessageText(e.target.value)}
-                        placeholder="Örn: Kaya Lojistik 1850 TL fatura&#10;veya Excel'den kopyalanan satır"
-                        rows={2}
-                        className="w-full p-2.5 bg-neutral-950 border border-neutral-800 rounded-lg text-xs text-neutral-200 focus:outline-none focus:border-teal-500 resize-y font-mono placeholder:text-neutral-700"
-                      />
-                      <div className="flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (simpleHealthMessageText.trim()) {
-                              parseHealthPastedText(simpleHealthMessageText);
-                              setSimpleHealthMessageText('');
-                            } else {
-                              alert("Lütfen yapıştırmak istediğiniz mesaj metnini girin.");
-                            }
-                          }}
-                          className="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                        >
-                          <Sparkles className="h-3.5 w-3.5" />
-                          Mesajı Oku & Faturaya Aktar
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Direct Manual Entry Note */}
-                <div className="text-[11px] text-neutral-400 bg-neutral-900/60 p-3 rounded-xl border border-neutral-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Info className="h-4 w-4 text-neutral-400 shrink-0" />
-                    <span>Ayrıca aşağıdaki firma tablosunda yer alan <strong className="text-white">"Ekstra / Sağlık Ücreti (₺)"</strong> sütunundan tüm firmaların sağlık bedellerini doğrudan elle yazarak da güncelleyebilirsiniz.</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
 
       {/* Firma Listesi (Company List) under parameters */}
       <div className="space-y-3" id="firm-list-under-parameters">
@@ -2805,6 +2387,110 @@ console.log(data);`}</pre>
                 className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
               >
                 Anlaşıldı, Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Çalışan Sayıları Popup Modal */}
+      {showEmployeeImportModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-[#0f0f11] border border-neutral-800 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl relative">
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
+                  <Users className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Çalışan Sayıları Aktarımı</h3>
+                  <p className="text-xs text-neutral-400">Excel dosyasından yükleyin veya kopyalayıp yapıştırın</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEmployeeImportModal(false)}
+                className="p-2 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Option 1: Excel File Upload */}
+              <div className="bg-neutral-900/60 p-4 rounded-xl border border-neutral-800 flex flex-col justify-between space-y-3">
+                <div>
+                  <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block mb-1">1. Excel (.xlsx / .xls) Yükle</span>
+                  <p className="text-xs text-neutral-400 font-medium leading-relaxed">
+                    İçerisinde <strong className="text-emerald-400">Hizmet Alan İşyeri Unvanı</strong> ve <strong className="text-emerald-400">Çalışan Sayısı</strong> başlıkları olan dosyayı sürükleyin.
+                  </p>
+                </div>
+
+                <div className="relative border-2 border-dashed border-neutral-800 hover:border-emerald-500/50 rounded-xl p-4 transition-colors flex flex-col items-center justify-center min-h-[110px] cursor-pointer bg-neutral-950/50 group">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv,.txt"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        handleExcelFileUpload(file);
+                        setShowEmployeeImportModal(false);
+                      }
+                      e.target.value = '';
+                    }}
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                  />
+                  <Upload className="h-7 w-7 text-emerald-400/80 group-hover:text-emerald-400 mb-1 transition-colors" />
+                  <span className="text-xs font-semibold text-neutral-300 group-hover:text-white transition-colors">Excel Dosyası Seçin</span>
+                  <span className="text-[10px] text-neutral-500 mt-0.5">Otomatik eşleştirilir</span>
+                </div>
+              </div>
+
+              {/* Option 2: Copy Paste */}
+              <div className="bg-neutral-900/60 p-4 rounded-xl border border-neutral-800 flex flex-col justify-between space-y-3">
+                <div>
+                  <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block mb-1">2. Excel'den Kopyala-Yapıştır</span>
+                  <p className="text-xs text-neutral-400 font-medium leading-relaxed">
+                    Excel'den kopyaladığınız Firma Unvanı ve Çalışan Sayısı sütunlarını yapıştırın.
+                  </p>
+                </div>
+
+                <div className="space-y-2.5">
+                  <textarea
+                    value={pastedText}
+                    onChange={(e) => setPastedText(e.target.value)}
+                    placeholder="Örn: ABC Lojistik    25..."
+                    rows={3}
+                    className="w-full p-2.5 bg-neutral-950 border border-neutral-800 rounded-lg text-xs font-mono text-neutral-300 focus:outline-hidden focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 placeholder:text-neutral-700 resize-none"
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (pastedText.trim()) {
+                          parseUploadedText(pastedText);
+                          setShowEmployeeImportModal(false);
+                        } else {
+                          alert("Lütfen kopyaladığınız Excel verisini kutucuğa yapıştırın.");
+                        }
+                      }}
+                      className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black font-bold rounded-lg text-xs transition-all shadow-sm shadow-emerald-500/20 flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Kopyalanan Verileri Aktar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-neutral-800">
+              <button
+                type="button"
+                onClick={() => setShowEmployeeImportModal(false)}
+                className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              >
+                Kapat
               </button>
             </div>
           </div>

@@ -54,11 +54,45 @@ export default function InvoicesToIssueView({
     return 'Temmuz 2026';
   };
 
-  // Helper to copy text to clipboard
-  const handleCopyToClipboard = (text: string, elementId: string) => {
-    navigator.clipboard.writeText(text);
+  // Toast message state for explicit copy confirmation
+  const [copyToast, setCopyToast] = useState<string | null>(null);
+
+  // Helper to copy text to clipboard with bulletproof fallback
+  const handleCopyToClipboard = (text: string, elementId: string, label?: string) => {
+    let success = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text);
+        success = true;
+      }
+    } catch (e) {
+      console.warn("Clipboard API failed, using fallback execCommand", e);
+    }
+
+    if (!success) {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        success = true;
+      } catch (err) {
+        console.error("Fallback copy failed:", err);
+      }
+    }
+
     setCopiedId(elementId);
-    setTimeout(() => setCopiedId(null), 1500);
+    if (label) {
+      setCopyToast(`${label}: "${text}" kopyalandı!`);
+      setTimeout(() => setCopyToast(null), 2000);
+    }
+    setTimeout(() => setCopiedId(null), 2000);
   };
 
   // Custom function to calculate Net and VAT for a portion of the fee
@@ -90,6 +124,14 @@ export default function InvoicesToIssueView({
 
   return (
     <div className="space-y-6" id="to-issue-container">
+      {/* Floating Copy Toast Notification */}
+      {copyToast && (
+        <div className="fixed top-5 right-5 z-50 bg-emerald-600 text-white px-4 py-2.5 rounded-xl shadow-2xl border border-emerald-400 text-xs font-bold flex items-center gap-2 animate-bounce">
+          <Check className="h-4 w-4" />
+          <span>{copyToast}</span>
+        </div>
+      )}
+
       {/* Upper Info */}
       <div className="bg-[#0a0a0a] p-6 rounded-2xl border border-neutral-800 shadow-xs flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
@@ -184,24 +226,26 @@ export default function InvoicesToIssueView({
                         
                         <div className="flex items-center gap-1 mt-1">
                           <button
-                            onClick={() => handleCopyToClipboard(uzmanNet.toFixed(2), `${inv.id}-uzman-net`)}
-                            className={`px-1 py-0.2 text-[8px] font-bold rounded border transition-all cursor-pointer ${
+                            onClick={() => handleCopyToClipboard(uzmanNet.toFixed(2), `${inv.id}-uzman-net`, 'Uzman Matrahı')}
+                            className={`px-1.5 py-0.5 text-[8px] font-bold rounded border transition-all cursor-pointer flex items-center gap-0.5 ${
                               copiedId === `${inv.id}-uzman-net`
-                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25 font-extrabold'
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400 font-extrabold scale-105'
                                 : 'bg-neutral-950/60 text-neutral-400 border-neutral-850 hover:text-white hover:bg-neutral-900'
                             }`}
                           >
-                            {copiedId === `${inv.id}-uzman-net` ? 'Kop' : 'Matrah'}
+                            {copiedId === `${inv.id}-uzman-net` ? <Check className="h-2.5 w-2.5 text-emerald-400" /> : null}
+                            {copiedId === `${inv.id}-uzman-net` ? 'Kopyalandı' : 'Matrah'}
                           </button>
                           <button
-                            onClick={() => handleCopyToClipboard(`İş Güvenliği Uzmanlığı Hizmet Bedeli`, `${inv.id}-uzman-text`)}
-                            className={`px-1 py-0.2 text-[8px] font-bold rounded border transition-all cursor-pointer ${
+                            onClick={() => handleCopyToClipboard(`İş Güvenliği Uzmanlığı Hizmet Bedeli`, `${inv.id}-uzman-text`, 'Uzman Açıklaması')}
+                            className={`px-1.5 py-0.5 text-[8px] font-bold rounded border transition-all cursor-pointer flex items-center gap-0.5 ${
                               copiedId === `${inv.id}-uzman-text`
-                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25 font-extrabold'
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400 font-extrabold scale-105'
                                 : 'bg-neutral-950/60 text-neutral-400 border-neutral-850 hover:text-white hover:bg-neutral-900'
                             }`}
                           >
-                            {copiedId === `${inv.id}-uzman-text` ? 'Kop' : 'Metin'}
+                            {copiedId === `${inv.id}-uzman-text` ? <Check className="h-2.5 w-2.5 text-emerald-400" /> : null}
+                            {copiedId === `${inv.id}-uzman-text` ? 'Kopyalandı' : 'Metin'}
                           </button>
                         </div>
                       </td>
@@ -217,24 +261,26 @@ export default function InvoicesToIssueView({
                         
                         <div className="flex items-center gap-1 mt-1">
                           <button
-                            onClick={() => handleCopyToClipboard(hekimNet.toFixed(2), `${inv.id}-hekim-net`)}
-                            className={`px-1 py-0.2 text-[8px] font-bold rounded border transition-all cursor-pointer ${
+                            onClick={() => handleCopyToClipboard(hekimNet.toFixed(2), `${inv.id}-hekim-net`, 'Hekim Matrahı')}
+                            className={`px-1.5 py-0.5 text-[8px] font-bold rounded border transition-all cursor-pointer flex items-center gap-0.5 ${
                               copiedId === `${inv.id}-hekim-net`
-                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25 font-extrabold'
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400 font-extrabold scale-105'
                                 : 'bg-neutral-950/60 text-neutral-400 border-neutral-850 hover:text-white hover:bg-neutral-900'
                             }`}
                           >
-                            {copiedId === `${inv.id}-hekim-net` ? 'Kop' : 'Matrah'}
+                            {copiedId === `${inv.id}-hekim-net` ? <Check className="h-2.5 w-2.5 text-emerald-400" /> : null}
+                            {copiedId === `${inv.id}-hekim-net` ? 'Kopyalandı' : 'Matrah'}
                           </button>
                           <button
-                            onClick={() => handleCopyToClipboard(`İşyeri Hekimliği Hizmet Bedeli`, `${inv.id}-hekim-text`)}
-                            className={`px-1 py-0.2 text-[8px] font-bold rounded border transition-all cursor-pointer ${
+                            onClick={() => handleCopyToClipboard(`İşyeri Hekimliği Hizmet Bedeli`, `${inv.id}-hekim-text`, 'Hekim Açıklaması')}
+                            className={`px-1.5 py-0.5 text-[8px] font-bold rounded border transition-all cursor-pointer flex items-center gap-0.5 ${
                               copiedId === `${inv.id}-hekim-text`
-                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25 font-extrabold'
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400 font-extrabold scale-105'
                                 : 'bg-neutral-950/60 text-neutral-400 border-neutral-850 hover:text-white hover:bg-neutral-900'
                             }`}
                           >
-                            {copiedId === `${inv.id}-hekim-text` ? 'Kop' : 'Metin'}
+                            {copiedId === `${inv.id}-hekim-text` ? <Check className="h-2.5 w-2.5 text-emerald-400" /> : null}
+                            {copiedId === `${inv.id}-hekim-text` ? 'Kopyalandı' : 'Metin'}
                           </button>
                         </div>
                       </td>
@@ -250,26 +296,28 @@ export default function InvoicesToIssueView({
                         
                         <div className="flex items-center gap-1 mt-1">
                           <button
-                            onClick={() => handleCopyToClipboard(saglikNet.toFixed(2), `${inv.id}-saglik-net`)}
-                            className={`px-1 py-0.2 text-[8px] font-bold rounded border transition-all cursor-pointer ${
+                            onClick={() => handleCopyToClipboard(saglikNet.toFixed(2), `${inv.id}-saglik-net`, 'Sağlık Matrahı')}
+                            className={`px-1.5 py-0.5 text-[8px] font-bold rounded border transition-all cursor-pointer flex items-center gap-0.5 ${
                               copiedId === `${inv.id}-saglik-net`
-                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25 font-extrabold'
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400 font-extrabold scale-105'
                                 : 'bg-neutral-950/60 text-neutral-400 border-neutral-850 hover:text-white hover:bg-neutral-900'
                             }`}
                             disabled={rawSaglikFee === 0}
                           >
-                            {copiedId === `${inv.id}-saglik-net` ? 'Kop' : 'Matrah'}
+                            {copiedId === `${inv.id}-saglik-net` ? <Check className="h-2.5 w-2.5 text-emerald-400" /> : null}
+                            {copiedId === `${inv.id}-saglik-net` ? 'Kopyalandı' : 'Matrah'}
                           </button>
                           <button
-                            onClick={() => handleCopyToClipboard(`Ekstra Sağlık Gideri Bedeli`, `${inv.id}-saglik-text`)}
-                            className={`px-1 py-0.2 text-[8px] font-bold rounded border transition-all cursor-pointer ${
+                            onClick={() => handleCopyToClipboard(`Ekstra Sağlık Gideri Bedeli`, `${inv.id}-saglik-text`, 'Sağlık Açıklaması')}
+                            className={`px-1.5 py-0.5 text-[8px] font-bold rounded border transition-all cursor-pointer flex items-center gap-0.5 ${
                               copiedId === `${inv.id}-saglik-text`
-                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25 font-extrabold'
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400 font-extrabold scale-105'
                                 : 'bg-neutral-950/60 text-neutral-400 border-neutral-850 hover:text-white hover:bg-neutral-900'
                             }`}
                             disabled={rawSaglikFee === 0}
                           >
-                            {copiedId === `${inv.id}-saglik-text` ? 'Kop' : 'Metin'}
+                            {copiedId === `${inv.id}-saglik-text` ? <Check className="h-2.5 w-2.5 text-emerald-400" /> : null}
+                            {copiedId === `${inv.id}-saglik-text` ? 'Kopyalandı' : 'Metin'}
                           </button>
                         </div>
                       </td>
@@ -285,14 +333,15 @@ export default function InvoicesToIssueView({
                         
                         <div className="flex justify-end gap-1 mt-1">
                           <button
-                            onClick={() => handleCopyToClipboard(totalInvoiceSum.toFixed(2), `${inv.id}-total`)}
-                            className={`px-1 py-0.2 text-[8px] font-bold rounded border transition-all cursor-pointer ${
+                            onClick={() => handleCopyToClipboard(totalInvoiceSum.toFixed(2), `${inv.id}-total`, 'Genel Toplam')}
+                            className={`px-1.5 py-0.5 text-[8px] font-bold rounded border transition-all cursor-pointer flex items-center gap-0.5 ${
                               copiedId === `${inv.id}-total`
-                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25 font-extrabold'
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400 font-extrabold scale-105'
                                 : 'bg-neutral-950/60 text-neutral-400 border-neutral-850 hover:text-white hover:bg-neutral-900'
                             }`}
                           >
-                            {copiedId === `${inv.id}-total` ? 'Kop' : 'Genel Toplam'}
+                            {copiedId === `${inv.id}-total` ? <Check className="h-2.5 w-2.5 text-emerald-400" /> : null}
+                            {copiedId === `${inv.id}-total` ? 'Kopyalandı' : 'Genel Toplam'}
                           </button>
                         </div>
                       </td>

@@ -229,6 +229,51 @@ print(response.json())
 
 ---
 
+## 🤖 Tetkik & Lab Sistemini (Port 3001) Geliştiren AI İçin Kopyalanabilir Prompt
+
+Tetkik / Sağlık Otomasyonu projenizi geliştiren diğer Yapay Zekaya (AI) aşağıdaki metni **birebir kopyalayıp yapıştırarak** talimat verebilirsiniz:
+
+```text
+Sistemimizde aynı sunucu üzerinde çalışan iki ana otomasyon bulunmaktadır:
+1. Tetkik & Lab Otomasyonu (Port 3001 - Sen bu sistemi geliştiriyorsun)
+2. OSGB Fatura & Cari Otomasyonu (Port 3002 - Webhook alıcı sistem)
+
+[GÖREV VE ZORUNLULUKLAR]
+Tetkik Sisteminde (Port 3001) herhangi bir tetkik, tahlil, reçete, fatura veya sağlık hizmeti işlemi kaydedildiğinde/kesildiğinde, Port 3002'deki Fatura Otomasyonuna ANINDA ve CANLI olarak HTTP POST isteği atacaksın.
+
+[ENTEGRASYON DETAYLARI]
+- Hedef Endpoint: http://localhost:3002/api/health-sync
+- HTTP Metodu: POST
+- Header Bilgileri:
+  - Content-Type: application/json
+  - Authorization: Bearer vps_secure_secret_2026 (veya x-api-key: vps_secure_secret_2026)
+
+[JSON PAYLOAD FORMATI]
+Gönderilecek veri formatı şu şekilde olmalıdır:
+{
+  "records": [
+    {
+      "firmName": "FİRMA VEYA MÜŞTERİ ADI",
+      "paymentType": "fatura",
+      "amount": 1500.00
+    }
+  ]
+}
+
+[ESNEK ALAN EŞLEŞTİRMELERİ]
+Port 3002 alıcı servisi aşağıdaki alternatif key isimlerini de otomatik kabul eder:
+- Firma Adı için: firmName, firma, firm, company, musteri, hasta, kurum, title, isyeri, name, cariName, hastaAdi, kurumAdi
+- Tutar için: amount, tutar, toplam, fiyat, ucret, price, cost, val, toplamTutar, bakiye
+- Ödeme/İşlem Türü için: paymentType, odemeTuru, type, tur, islem
+
+[KRİTİK KURALLAR]
+1. Her yeni tetkik/sağlık kaydında bu API'ye isteği anında asenkron (try-catch içinde) gönder.
+2. Port 3002 servisinin yanıt verememesi durumunda Tetkik Sisteminin kendi ana akışı aksamamalı (catch bloğunda logla, hata fırlatma).
+3. İstekleri http://localhost:3002/api/health-sync adresine gönder.
+```
+
+---
+
 ## ⚡ Özellik Özeti
 
 1. **İşlenen Verilerin Otomatik Temizlenmesi:** Faturaya aktarılan sağlık mesajları canlı listeden temizlenir ve tekrar gösterilmez.
