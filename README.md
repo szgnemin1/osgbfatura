@@ -121,9 +121,21 @@ pm2 delete osgb-fatura-3002
 
 ---
 
-## 🔄 Projeyi Güncelleme Adımları (Updating the App)
+## 🔄 Projeyi Güncelleme Yöntemleri (Updating the App)
 
-GitHub deposuna yeni kodlar veya güncellemeler geldiğinde sunucunuzdaki uygulamayı güncellemek için aşağıdaki adımları sırasıyla çalıştırın:
+Sistemi güncellemek için **2 farklı yöntem** kullanabilirsiniz:
+
+### 🌟 Yöntem 1: Web Arayüzünden Tek Tıkla Güncelleme (Terminale Girmeden!)
+1. Uygulamada sol menüdeki **"Güncelle"** veya **"Ayarlar"** butonuna tıklayın.
+2. **"Güncellemeleri Kontrol Et"** butonuna basarak GitHub'daki yeni güncellemeleri görün.
+3. **"Sistemi Şimdi Güncelle"** butonuna tıklayın.
+4. Sistem otomatik olarak `git pull`, `npm run build` ve `pm2 restart osgb-fatura-3002` işlemlerini arka planda tamamlayacak ve sayfayı yenileyecektir.
+
+---
+
+### 💻 Yöntem 2: Terminal Üzerinden Manuel Güncelleme
+
+GitHub deposuna yeni kodlar geldiğinde sunucu terminalinden güncellemek isterseniz:
 
 ```bash
 # 1. Proje dizinine gidin
@@ -132,13 +144,11 @@ cd osgbfatura
 # 2. GitHub'dan en son güncellemeleri çekin
 git pull origin main
 
-# 3. Yeni bağımlılıklar varsa yükleyin
+# 3. Bağımlılıkları kontrol edin ve uygulamayı derleyin
 npm install
-
-# 4. Uygulamayı yeniden derleyin
 npm run build
 
-# 5. PM2 sürecini yeniden başlatın
+# 4. PM2 sürecini yeniden başlatın
 pm2 restart osgb-fatura-3002
 ```
 

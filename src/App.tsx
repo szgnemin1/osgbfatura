@@ -110,6 +110,12 @@ export default function App() {
   // Settings overlay modal state
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
+  // System Update States
+  const [checkingSystemUpdate, setCheckingSystemUpdate] = useState(false);
+  const [systemUpdateStatus, setSystemUpdateStatus] = useState<any>(null);
+  const [updatingSystem, setUpdatingSystem] = useState(false);
+  const [updateLogs, setUpdateLogs] = useState<string[]>([]);
+
   // Form states for Settings Modal
   const [settingsUzman, setSettingsUzman] = useState(settings.uzmanPercentage);
   const [settingsHekim, setSettingsHekim] = useState(settings.hekimPercentage);
@@ -883,13 +889,22 @@ export default function App() {
             <span>SİSTEM KDV:</span>
             <span className="text-neutral-300">%{settings.kdvRate}</span>
           </div>
-          <button
-            onClick={() => { setShowSettingsModal(true); setMobileMenuOpen(false); }}
-            className="w-full py-2.5 px-4 bg-[#111111] hover:bg-neutral-800 border border-neutral-800 text-neutral-300 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <Settings className="h-4 w-4 text-indigo-400" />
-            Sistem Parametreleri
-          </button>
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <button
+              onClick={() => { setShowSettingsModal(true); setMobileMenuOpen(false); }}
+              className="py-2 px-2 bg-[#111111] hover:bg-neutral-800 border border-neutral-800 text-neutral-300 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Settings className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+              <span>Ayarlar</span>
+            </button>
+            <button
+              onClick={() => { setShowSettingsModal(true); setMobileMenuOpen(false); }}
+              className="py-2 px-2 bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <RefreshCw className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+              <span>Güncelle</span>
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -1335,6 +1350,98 @@ Not: Lütfen ödeme türü 'fatura' olan sağlık bedellerini firma adına göre
                     Diğer AI Yazılımcı İçin RSS Entegrasyon Promptunu Kopyala
                   </button>
                 </div>
+              </div>
+
+              {/* Tek Tıkla Otomatik Sistem Güncelleme (Terminalsiz) */}
+              <div className="border-t border-neutral-800 pt-4 mt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <RefreshCw className="h-3.5 w-3.5 text-emerald-400" />
+                    Tek Tıkla Otomatik Sistem Güncelleme (Terminalsiz)
+                  </span>
+                  <span className="text-[10px] text-emerald-300 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                    Git Pull + Build + PM2
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-neutral-400 leading-relaxed">
+                  GitHub deposuna (<code className="text-emerald-300">github.com/szgnemin1/osgbfatura</code>) yeni kod veya güncelleme eklendiğinde terminale girmeden tek tıkla sistemi güncelleyebilirsiniz.
+                </p>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={checkingSystemUpdate || updatingSystem}
+                    onClick={async () => {
+                      setCheckingSystemUpdate(true);
+                      try {
+                        const res = await fetch('/api/system/git-status');
+                        const data = await res.json();
+                        setSystemUpdateStatus(data);
+                      } catch {
+                        setSystemUpdateStatus({ success: false, message: 'Güncelleme durumu kontrol edilemedi.' });
+                      } finally {
+                        setCheckingSystemUpdate(false);
+                      }
+                    }}
+                    className="flex-1 py-2 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-800 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${checkingSystemUpdate ? 'animate-spin text-emerald-400' : 'text-neutral-400'}`} />
+                    {checkingSystemUpdate ? 'Kontrol Ediliyor...' : 'Güncellemeleri Kontrol Et'}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={updatingSystem}
+                    onClick={async () => {
+                      if (!confirm("Sistem güncellenecek, en son GitHub kodları çekilip yeniden derlenecek ve 3002 portundaki uygulama baştan başlatılacak.\n\nDevam etmek istiyor musunuz?")) {
+                        return;
+                      }
+                      setUpdatingSystem(true);
+                      setUpdateLogs(["Güncelleme süreci başlatıldı..."]);
+                      try {
+                        const res = await fetch('/api/system/update', { method: 'POST' });
+                        const data = await res.json();
+                        if (data.logs) {
+                          setUpdateLogs(data.logs);
+                        }
+                        if (data.success) {
+                          alert(`✅ ${data.message}\n\nSayfa 3 saniye içinde otomatik yenilenecektir.`);
+                          setTimeout(() => {
+                            window.location.reload();
+                          }, 3000);
+                        } else {
+                          alert(`⚠️ Hata: ${data.error || 'Güncelleme tamamlanamadı.'}`);
+                        }
+                      } catch (err: any) {
+                        alert("⚠️ Güncelleme başlatıldı ve sunucu yeniden başlatılıyor. Lütfen 5 saniye sonra sayfayı yenileyin.");
+                        setTimeout(() => {
+                          window.location.reload();
+                        }, 4000);
+                      } finally {
+                        setUpdatingSystem(false);
+                      }
+                    }}
+                    className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Download className={`h-3.5 w-3.5 ${updatingSystem ? 'animate-bounce' : ''}`} />
+                    {updatingSystem ? 'Sistem Güncelleniyor...' : 'Sistemi Şimdi Güncelle'}
+                  </button>
+                </div>
+
+                {systemUpdateStatus && (
+                  <div className={`p-2.5 rounded-xl border text-xs font-medium ${systemUpdateStatus.hasUpdates ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'}`}>
+                    {systemUpdateStatus.message}
+                  </div>
+                )}
+
+                {updateLogs.length > 0 && (
+                  <div className="p-3 bg-black/80 border border-neutral-800 rounded-xl space-y-1 font-mono text-[10px] text-emerald-400 max-h-32 overflow-y-auto">
+                    {updateLogs.map((log, idx) => (
+                      <div key={idx} className="leading-relaxed">» {log}</div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Sistem Yedekleme ve Yükleme */}
