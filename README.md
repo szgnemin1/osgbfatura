@@ -50,11 +50,14 @@ cp .env.example .env
 `.env` dosyasını açıp gerekli bilgileri düzenleyin:
 
 ```env
+# Çalışma Portu (İstediğiniz portu tanımlayabilirsiniz: 3002)
+PORT=3002
+
 # VPS / Webhook Güvenlik Anahtarı (Sağlık Otomasyonu Entegrasyonu İçin)
 VPS_API_SECRET="vps_secure_secret_2026"
 
 # Uygulama Alan Adı / URL
-APP_URL="http://localhost:3000"
+APP_URL="http://localhost:3002"
 
 # Gemini AI API Anahtarı (İsteğe Bağlı)
 GEMINI_API_KEY="your_gemini_api_key_here"
@@ -69,7 +72,7 @@ npm run dev
 ```
 
 Uygulama çalıştıktan sonra tarayıcınızda şu adrese gidin:
-👉 **`http://localhost:3000`**
+👉 **`http://localhost:3002`** (ya da `.env` dosyasında belirlediğiniz port)
 
 ---
 
@@ -81,7 +84,7 @@ Sunucuda canlıya almak için aşağıdaki komutları kullanın:
 # Projeyi derleyin (Vite + esbuild)
 npm run build
 
-# Derlenmiş uygulamayı başlatın
+# Derlenmiş uygulamayı başlatın (PORT=3002 ile çalışır)
 npm start
 ```
 
