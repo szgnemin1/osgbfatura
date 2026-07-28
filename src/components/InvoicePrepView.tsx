@@ -247,8 +247,26 @@ export default function InvoicePrepView({
     }
   };
 
-  // Dynamic values per firm in a map, initialized from the current firms list
+  // Dynamic values per firm in a map, initialized from localStorage or current firms list
   const [firmInputs, setFirmInputs] = useState<Record<string, { employeeCount: number; healthAmount: number; extraNote: string }>>(() => {
+    try {
+      const saved = localStorage.getItem('fcts_firm_inputs');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        firms.forEach(f => {
+          if (!parsed[f.id]) {
+            parsed[f.id] = {
+              employeeCount: f.employeeCount || 10,
+              healthAmount: 0,
+              extraNote: ''
+            };
+          }
+        });
+        return parsed;
+      }
+    } catch (e) {
+      console.error("Error reading firmInputs from localStorage", e);
+    }
     const initial: Record<string, { employeeCount: number; healthAmount: number; extraNote: string }> = {};
     firms.forEach(f => {
       initial[f.id] = {
@@ -259,6 +277,15 @@ export default function InvoicePrepView({
     });
     return initial;
   });
+
+  // Automatically save firmInputs to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('fcts_firm_inputs', JSON.stringify(firmInputs));
+    } catch (e) {
+      console.error("Error writing firmInputs to localStorage", e);
+    }
+  }, [firmInputs]);
 
   // Synchronize firmInputs whenever firms prop changes (e.g. when new firms are added)
   useEffect(() => {

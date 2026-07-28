@@ -6,9 +6,10 @@ interface PricingViewProps {
   firms: Firm[];
   onSaveFirm: (firm: Firm) => void;
   onAddFirm: (firm: Firm | string) => void;
+  onDeleteFirm?: (firmId: string) => void;
 }
 
-export default function PricingView({ firms, onSaveFirm, onAddFirm }: PricingViewProps) {
+export default function PricingView({ firms, onSaveFirm, onAddFirm, onDeleteFirm }: PricingViewProps) {
   const [selectedFirmId, setSelectedFirmId] = useState<string>(firms[0]?.id || '');
   const [listSearchTerm, setListSearchTerm] = useState('');
   const [newFirmName, setNewFirmName] = useState('');
@@ -607,11 +608,23 @@ export default function PricingView({ firms, onSaveFirm, onAddFirm }: PricingVie
               </div>
             </div>
 
-            {/* Save Button */}
-            <div className="flex justify-end pt-4 border-t border-neutral-800">
+            {/* Save & Delete Buttons */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-neutral-800">
+              {onDeleteFirm && selectedFirm ? (
+                <button
+                  type="button"
+                  onClick={() => onDeleteFirm(selectedFirm.id)}
+                  className="flex items-center gap-1.5 px-3.5 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  title="Seçili firmayı kalıcı olarak sistemden sil"
+                >
+                  <Trash className="h-4 w-4" />
+                  Firmayı Sil
+                </button>
+              ) : <div />}
+
               <button
                 type="submit"
-                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl text-sm font-semibold transition-all shadow-md shadow-indigo-650/10 cursor-pointer"
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-md shadow-indigo-650/10 cursor-pointer"
                 id="btn-save-pricing"
               >
                 <Save className="h-4 w-4" />
@@ -798,6 +811,19 @@ export default function PricingView({ firms, onSaveFirm, onAddFirm }: PricingVie
                       <span className="bg-neutral-900 text-neutral-400 text-[9px] font-medium px-2 py-0.5 rounded border border-neutral-800">
                         {f.isVatIncluded ? 'KDV Dahil' : 'KDV Hariç'}
                       </span>
+                      {onDeleteFirm && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteFirm(f.id);
+                          }}
+                          className="p-1 hover:bg-red-500/20 text-neutral-500 hover:text-red-400 rounded transition-colors ml-1 cursor-pointer"
+                          title="Firmayı Sil"
+                        >
+                          <Trash className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
                   </button>
                 );

@@ -21,7 +21,8 @@ import {
   Activity,
   Copy,
   Rss,
-  Plus
+  Plus,
+  LogOut
 } from 'lucide-react';
 
 // Type imports
@@ -51,6 +52,7 @@ import InvoicesToIssueView from './components/InvoicesToIssueView';
 import CariDetailView from './components/CariDetailView';
 import DebtTrackingView from './components/DebtTrackingView';
 import ExpenseManagementView from './components/ExpenseManagementView';
+import SettingsView from './components/SettingsView';
 
 export default function App() {
   // 1. Initial State Load (loading from localStorage, falling back to seed history)
@@ -539,6 +541,17 @@ export default function App() {
     setFirms(prev => prev.map(f => f.id === updatedFirm.id ? updatedFirm : f));
   };
 
+  // Delete an existing firm
+  const handleDeleteFirm = (firmId: string) => {
+    const firmToDelete = firms.find(f => f.id === firmId);
+    if (!firmToDelete) return;
+
+    if (confirm(`"${firmToDelete.name}" firmasını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) {
+      setFirms(prev => prev.filter(f => f.id !== firmId));
+      alert(`"${firmToDelete.name}" firması sistemden silindi.`);
+    }
+  };
+
   // Add a brand new firm
   const handleAddFirm = (firmOrName: Firm | string) => {
     if (typeof firmOrName === 'object' && firmOrName !== null) {
@@ -724,6 +737,11 @@ export default function App() {
     setCategories(prev => [...prev, cat]);
   };
 
+  // Delete an expense category
+  const handleDeleteExpenseCategory = (id: string) => {
+    setCategories(prev => prev.filter(c => c.id !== id));
+  };
+
   // Live calculator to compute actual outstanding debt (Cari bakiye)
   const getFirmBalance = (firmId: string): number => {
     const firmTxs = transactions.filter(t => t.firmId === firmId);
@@ -876,6 +894,19 @@ export default function App() {
               <TrendingDown className="h-4.5 w-4.5 shrink-0" />
               <span>Gider Yönetimi</span>
             </button>
+
+            {/* 8. Güvenlik ve Ayarlar */}
+            <button
+              onClick={() => { setActiveTab(8); setMobileMenuOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-semibold transition-all border ${
+                activeTab === 8 
+                  ? 'bg-indigo-600/10 text-indigo-400 border-indigo-500/20 shadow-xs' 
+                  : 'text-neutral-400 hover:text-white hover:bg-neutral-900 border-transparent'
+              }`}
+            >
+              <Settings className="h-4.5 w-4.5 shrink-0" />
+              <span>Güvenlik & Ayarlar</span>
+            </button>
           </nav>
         </div>
  
@@ -929,6 +960,7 @@ export default function App() {
               {activeTab === 5 && 'Müşteri Cari Hesap Defterleri'}
               {activeTab === 6 && 'Alacak Yaşlandırma & Risk Analizi'}
               {activeTab === 7 && 'Şirket Gider Matrisi & Analizleri'}
+              {activeTab === 8 && 'Güvenlik ve Sistem Ayarları'}
             </span>
           </div>
           
@@ -938,6 +970,18 @@ export default function App() {
               <Sparkles className="h-3 w-3 text-indigo-400" />
               VDS Entegrasyonuna Hazır Çözüm
             </div>
+
+            <button
+              onClick={() => {
+                sessionStorage.removeItem('active_session');
+                window.location.reload();
+              }}
+              className="flex items-center gap-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 px-3 py-1.5 rounded-full text-[10px] font-bold transition-colors cursor-pointer"
+              title="Güvenli Çıkış"
+            >
+              <LogOut className="h-3 w-3" />
+              Çıkış Yap
+            </button>
           </div>
         </header>
  
@@ -957,6 +1001,7 @@ export default function App() {
               firms={firms} 
               onSaveFirm={handleSaveFirm} 
               onAddFirm={handleAddFirm} 
+              onDeleteFirm={handleDeleteFirm}
             />
           )}
 
@@ -1012,9 +1057,14 @@ export default function App() {
               transactions={transactions}
               onAddExpense={handleAddExpense}
               onAddCategory={handleAddExpenseCategory}
+              onDeleteCategory={handleDeleteExpenseCategory}
               onEditExpense={handleEditExpense}
               onDeleteExpense={handleDeleteExpense}
             />
+          )}
+
+          {activeTab === 8 && (
+            <SettingsView />
           )}
         </section>
       </main>
