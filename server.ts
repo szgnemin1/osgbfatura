@@ -1,6 +1,9 @@
 import express from "express";
 import path from "path";
+import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
+
+dotenv.config();
 
 interface HealthSyncRecord {
   firmName: string;
@@ -26,7 +29,7 @@ let lastSyncCount: number = 0;
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3002;
 
   app.use(express.json({ limit: "10mb" }));
 
