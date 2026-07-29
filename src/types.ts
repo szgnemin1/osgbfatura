@@ -49,6 +49,7 @@ export interface Firm {
   employeeCount?: number; // Last entered employee count
   parentFirmId?: string; // Link to parent (Merkez) firm if this is a Branch (Şube)
   serviceType?: 'both' | 'expert_only' | 'doctor_only'; // Service type split configuration
+  hazardClass?: 'AZ TEHLİKELİ' | 'TEHLİKELİ' | 'ÇOK TEHLİKELİ'; // Hazard class
   groupName?: string; // Custom group name for E-Fatura / E-Arşiv grouping
 }
 

@@ -4,31 +4,10 @@ import dotenv from "dotenv";
 import { exec } from "child_process";
 import util from "util";
 import { createServer as createViteServer } from "vite";
+import db from "./db.js"; // SQLite database
 
 dotenv.config();
 const execPromise = util.promisify(exec);
-
-interface HealthSyncRecord {
-  firmName: string;
-  paymentType: string;
-  amount: number;
-}
-
-interface HealthMessage {
-  id: string;
-  timestamp: string;
-  firmName: string;
-  amount: number;
-  paymentType: string;
-  rawText?: string;
-}
-
-// In-memory store for synced health data from VPS & Live Messages
-let syncedHealthTotals: Record<string, number> = {};
-let recentHealthMessages: HealthMessage[] = [];
-let processedMessageIds: Set<string> = new Set();
-let lastSyncTime: string | null = null;
-let lastSyncCount: number = 0;
 
 async function startServer() {
   const app = express();
@@ -41,7 +20,7 @@ async function startServer() {
   app.use("/api", (req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-API-Key");
-    res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT");
+    res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE");
     res.header("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.header("Pragma", "no-cache");
     res.header("Expires", "0");
@@ -51,14 +30,8 @@ async function startServer() {
     next();
   });
 
-  // API Route: Secure Health Data Sync from external VPS or local Tetkik System (Port 3001)
+  // --- HEALTH SYNC API ---
   const handleHealthSync = (req: express.Request, res: express.Response) => {
-    console.log(`[HEALTH-SYNC] Incoming ${req.method} request from IP: ${req.ip || req.socket.remoteAddress}`);
-    console.log(`[HEALTH-SYNC] Headers:`, JSON.stringify(req.headers));
-    console.log(`[HEALTH-SYNC] Body:`, JSON.stringify(req.body));
-    console.log(`[HEALTH-SYNC] Query:`, JSON.stringify(req.query));
-
-    // 1. Flexible Authorization / Key Check (Auto-pass if same server / localhost or if valid key)
     const authHeader = req.headers.authorization;
     const apiKey = req.headers["x-api-key"] || req.body?.secretKey || req.query?.secretKey || req.query?.key || req.query?.token;
     const expectedSecret = process.env.VPS_API_SECRET;
@@ -73,281 +46,301 @@ async function startServer() {
     const clientIp = req.ip || req.socket.remoteAddress || "";
     const isLocalhost = clientIp.includes("127.0.0.1") || clientIp.includes("::1") || clientIp.includes("localhost") || clientIp.includes("::ffff:127.0.0.1");
 
-    // Allow request if expectedSecret is empty, OR if provided token matches, OR if request is from localhost / same server
     if (expectedSecret && providedToken !== expectedSecret && !isLocalhost && providedToken !== "vps_secure_secret_2026") {
-      console.warn(`[HEALTH-SYNC REJECTED] Unauthorized attempt from ${clientIp}`);
-      return res.status(401).json({
-        success: false,
-        error: "Yetkisiz Erişim: VPS API Anahtarı Uyuşmuyor."
-      });
+      return res.status(401).json({ success: false, error: "Yetkisiz Erişim" });
     }
 
-    // 2. Flexible Body/Query Extraction
     let sourceData = req.body;
     if ((!sourceData || Object.keys(sourceData).length === 0) && req.query && Object.keys(req.query).length > 0) {
       sourceData = req.query;
     }
 
     let list: any[] = [];
-    if (Array.isArray(sourceData)) {
-      list = sourceData;
-    } else if (sourceData && Array.isArray(sourceData.records)) {
-      list = sourceData.records;
-    } else if (sourceData && Array.isArray(sourceData.data)) {
-      list = sourceData.data;
-    } else if (sourceData && Array.isArray(sourceData.items)) {
-      list = sourceData.items;
-    } else if (sourceData && Array.isArray(sourceData.list)) {
-      list = sourceData.list;
-    } else if (sourceData && typeof sourceData === 'object') {
-      list = [sourceData];
-    }
+    if (Array.isArray(sourceData)) list = sourceData;
+    else if (sourceData && Array.isArray(sourceData.records)) list = sourceData.records;
+    else if (sourceData && Array.isArray(sourceData.data)) list = sourceData.data;
+    else if (sourceData && Array.isArray(sourceData.items)) list = sourceData.items;
+    else if (sourceData && Array.isArray(sourceData.list)) list = sourceData.list;
+    else if (sourceData && typeof sourceData === 'object') list = [sourceData];
 
     if (!list || list.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: "Geçersiz Veri Formatı: Gönderilen veri doldurulmamış.",
-        documentation: {
-          endpoint: "/api/health-sync",
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          samplePayload: {
-            records: [
-              { firmName: "Açılım Medikal A.Ş.", paymentType: "fatura", amount: 2500 }
-            ]
-          }
-        }
-      });
+      return res.status(400).json({ success: false, error: "Geçersiz Veri Formatı" });
     }
 
-    // 3. Process ALL records from Tetkik / Health System
-    const newTotals: Record<string, number> = {};
     let matchedRows = 0;
+    const insertMsg = db.prepare(`
+      INSERT INTO health_sync_messages (id, timestamp, firmName, amount, paymentType, rawText)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
 
-    list.forEach((rec: any) => {
-      // Extract Firm / Client Name flexible keys
-      const firmName = String(
-        rec.firmName || rec.firma || rec.firm || rec.company ||
-        rec.musteri || rec.hasta || rec.kurum || rec.title ||
-        rec.isyeri || rec.name || rec.cariName || rec.cari ||
-        rec.hastaAdi || rec.hasta_adi || rec.kurumAdi || rec.kurum_adi || ""
-      ).trim();
+    db.transaction(() => {
+      list.forEach((rec: any) => {
+        const firmName = String(rec.firmName || rec.firma || rec.firm || rec.company || rec.musteri || rec.hasta || rec.kurum || rec.title || rec.isyeri || rec.name || rec.cariName || rec.cari || rec.hastaAdi || rec.hasta_adi || rec.kurumAdi || rec.kurum_adi || "").trim();
+        const amt = Number(rec.amount ?? rec.tutar ?? rec.toplam ?? rec.fiyat ?? rec.ucret ?? rec.price ?? rec.cost ?? rec.val ?? rec.toplamTutar ?? rec.toplam_tutar ?? rec.bakiye ?? 0) || 0;
+        const pType = String(rec.paymentType || rec.odemeTuru || rec.odeme_turu || rec.type || rec.tur || rec.islem || "fatura").trim();
 
-      // Extract Amount flexible keys
-      const amt = Number(
-        rec.amount ?? rec.tutar ?? rec.toplam ?? rec.fiyat ??
-        rec.ucret ?? rec.price ?? rec.cost ?? rec.val ??
-        rec.toplamTutar ?? rec.toplam_tutar ?? rec.bakiye ?? 0
-      ) || 0;
+        if (!firmName) return;
 
-      // Extract Payment / Process Type flexible keys
-      const pType = String(
-        rec.paymentType || rec.odemeTuru || rec.odeme_turu ||
-        rec.type || rec.tur || rec.islem || "fatura"
-      ).trim();
+        matchedRows++;
+        const id = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+        const timestamp = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const rawText = `${firmName} - ${amt.toLocaleString('tr-TR')} ₺ (${pType || 'Sağlık Hizmeti'})`;
 
-      if (!firmName) return;
-
-      newTotals[firmName] = (newTotals[firmName] || 0) + amt;
-      matchedRows++;
-
-      // Create message for live stream
-      const msgObj: HealthMessage = {
-        id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-        timestamp: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        firmName,
-        amount: amt,
-        paymentType: pType || 'fatura',
-        rawText: `${firmName} - ${amt.toLocaleString('tr-TR')} ₺ (${pType || 'Sağlık Hizmeti'})`
-      };
-
-      // Unshift to recent live messages stream
-      recentHealthMessages.unshift(msgObj);
-    });
-
-    // Limit messages list to last 50 items
-    recentHealthMessages = recentHealthMessages.slice(0, 50);
-
-    // Update syncedHealthTotals
-    if (sourceData && (sourceData.reset === true || sourceData.mode === "replace")) {
-      syncedHealthTotals = newTotals;
-    } else {
-      Object.keys(newTotals).forEach((firmName) => {
-        syncedHealthTotals[firmName] = (syncedHealthTotals[firmName] || 0) + newTotals[firmName];
+        insertMsg.run(id, timestamp, firmName, amt, pType, rawText);
       });
-    }
+    })();
 
-    lastSyncTime = new Date().toISOString();
-    lastSyncCount = Object.keys(syncedHealthTotals).length;
-
-    console.log(`[HEALTH-SYNC SUCCESS] Processed ${matchedRows} rows. Total firms: ${lastSyncCount}`);
-
-    return res.json({
-      success: true,
-      message: `${matchedRows} adet sağlık verisi başarıyla alındı ve canlı akışa eklendi.`,
-      matchedRows,
-      uniqueFirmsUpdated: lastSyncCount,
-      lastSyncTime,
-      recentMessages: recentHealthMessages,
-      totals: syncedHealthTotals
-    });
+    return res.json({ success: true, message: `${matchedRows} kayıt eklendi.`, matchedRows });
   };
 
   app.post("/api/health-sync", handleHealthSync);
   app.get("/api/health-sync", handleHealthSync);
 
-  // API Route: Mark messages as processed so they are not shown again
-  app.post("/api/health-sync/processed", (req, res) => {
-    const { ids } = req.body || {};
-    if (Array.isArray(ids)) {
-      ids.forEach((id: string) => processedMessageIds.add(String(id)));
-    } else if (req.body?.id) {
-      processedMessageIds.add(String(req.body.id));
-    }
-    // Also filter out processed from recentHealthMessages
-    recentHealthMessages = recentHealthMessages.filter(m => !processedMessageIds.has(m.id));
-    return res.json({ success: true, processedCount: processedMessageIds.size, remainingCount: recentHealthMessages.length });
-  });
-
-  // API Route: Get latest synced health totals and message stream for client UI
   app.get("/api/health-sync/latest", (req, res) => {
-    // If no health data synced yet, initialize sample fatura health data & messages for smooth testing
-    if (Object.keys(syncedHealthTotals).length === 0 && recentHealthMessages.length === 0) {
-      syncedHealthTotals = {
-        "ABC Teknoloji A.Ş.": 2500,
-        "XYZ Lojistik ve Ticaret": 1850,
-        "Anadolu İnşaat Sanayi": 3200
-      };
-      const initialMsgs = [
-        {
-          id: 'msg_sample_1',
-          timestamp: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
-          firmName: 'ABC Teknoloji A.Ş.',
-          amount: 2500,
-          paymentType: 'fatura',
-          rawText: 'ABC Teknoloji A.Ş. - 2.500 ₺ Fatura Sağlık Hizmet Bedeli'
-        },
-        {
-          id: 'msg_sample_2',
-          timestamp: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
-          firmName: 'XYZ Lojistik ve Ticaret',
-          amount: 1850,
-          paymentType: 'fatura',
-          rawText: 'XYZ Lojistik ve Ticaret - 1.850 ₺ Fatura Sağlık Hizmet Bedeli'
-        }
-      ];
-      recentHealthMessages = initialMsgs.filter(m => !processedMessageIds.has(m.id));
-      lastSyncTime = new Date().toISOString();
-    }
-
-    // Always filter out processed messages
-    const unprocessedMessages = recentHealthMessages.filter(m => !processedMessageIds.has(m.id));
+    const messages = db.prepare("SELECT * FROM health_sync_messages WHERE processed = 0 ORDER BY createdAt DESC LIMIT 50").all();
+    
+    const totals: Record<string, number> = {};
+    messages.forEach((m: any) => {
+      totals[m.firmName] = (totals[m.firmName] || 0) + m.amount;
+    });
 
     return res.json({
       success: true,
-      lastSyncTime,
-      uniqueFirmsCount: Object.keys(syncedHealthTotals).length,
-      recentMessages: unprocessedMessages,
-      totals: syncedHealthTotals
+      uniqueFirmsCount: Object.keys(totals).length,
+      recentMessages: messages,
+      totals
     });
   });
 
-  // API Health Check
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  app.post("/api/health-sync/processed", (req, res) => {
+    const { ids } = req.body || {};
+    const idList = Array.isArray(ids) ? ids : (req.body?.id ? [req.body.id] : []);
+    
+    if (idList.length > 0) {
+      const placeholders = idList.map(() => '?').join(',');
+      db.prepare(`UPDATE health_sync_messages SET processed = 1 WHERE id IN (\${placeholders})`).run(...idList);
+    }
+    return res.json({ success: true });
   });
 
-  // API Route: Check Git Updates status
+  // --- CRUD API ROUTES ---
+
+  // FIRMS
+  app.get("/api/firms", (req, res) => {
+    const firms = db.prepare("SELECT * FROM firms").all().map((f: any) => ({
+      ...f,
+      isVatIncluded: f.isVatIncluded === 1,
+      pricingModel: f.pricingModel ? JSON.parse(f.pricingModel) : { type: 'standart' }
+    }));
+    res.json(firms);
+  });
+
+  app.post("/api/firms", (req, res) => {
+    const f = req.body;
+    db.prepare(`
+      INSERT INTO firms (id, name, isVatIncluded, invoiceType, taxNumber, address, pricingModel, healthDataFee, employeeCount, parentFirmId, serviceType, hazardClass)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      f.id, f.name, f.isVatIncluded ? 1 : 0, f.invoiceType, f.taxNumber, f.address, JSON.stringify(f.pricingModel), f.healthDataFee, f.employeeCount, f.parentFirmId, f.serviceType, f.hazardClass
+    );
+    res.json({ success: true });
+  });
+
+  app.put("/api/firms/:id", (req, res) => {
+    const f = req.body;
+    db.prepare(`
+      UPDATE firms SET name=?, isVatIncluded=?, invoiceType=?, taxNumber=?, address=?, pricingModel=?, healthDataFee=?, employeeCount=?, parentFirmId=?, serviceType=?, hazardClass=?, updatedAt=CURRENT_TIMESTAMP
+      WHERE id=?
+    `).run(
+      f.name, f.isVatIncluded ? 1 : 0, f.invoiceType, f.taxNumber, f.address, JSON.stringify(f.pricingModel), f.healthDataFee, f.employeeCount, f.parentFirmId, f.serviceType, f.hazardClass, req.params.id
+    );
+    res.json({ success: true });
+  });
+
+  app.delete("/api/firms/:id", (req, res) => {
+    db.prepare("DELETE FROM firms WHERE id=?").run(req.params.id);
+    res.json({ success: true });
+  });
+
+  // INVOICES
+  app.get("/api/invoices", (req, res) => {
+    const invoices = db.prepare("SELECT * FROM invoices").all().map((i: any) => ({
+      ...i,
+      isVatIncluded: i.isVatIncluded === 1,
+      isApproved: i.isApproved === 1
+    }));
+    res.json(invoices);
+  });
+
+  app.post("/api/invoices", (req, res) => {
+    const i = req.body;
+    db.prepare(`
+      INSERT INTO invoices (id, firmId, firmName, invoiceType, date, employeeCount, baseAmount, healthAmount, totalAmount, isVatIncluded, status, specialistFee, doctorFee, vatRate, vatAmount, isApproved, approvalDate, paymentDate)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      i.id, i.firmId, i.firmName, i.invoiceType, i.date, i.employeeCount, i.baseAmount, i.healthAmount, i.totalAmount, i.isVatIncluded ? 1 : 0, i.status, i.specialistFee, i.doctorFee, i.vatRate, i.vatAmount, i.isApproved ? 1 : 0, i.approvalDate, i.paymentDate
+    );
+    res.json({ success: true });
+  });
+
+  app.put("/api/invoices/:id", (req, res) => {
+    const i = req.body;
+    db.prepare(`
+      UPDATE invoices SET firmId=?, firmName=?, invoiceType=?, date=?, employeeCount=?, baseAmount=?, healthAmount=?, totalAmount=?, isVatIncluded=?, status=?, specialistFee=?, doctorFee=?, vatRate=?, vatAmount=?, isApproved=?, approvalDate=?, paymentDate=?, updatedAt=CURRENT_TIMESTAMP
+      WHERE id=?
+    `).run(
+      i.firmId, i.firmName, i.invoiceType, i.date, i.employeeCount, i.baseAmount, i.healthAmount, i.totalAmount, i.isVatIncluded ? 1 : 0, i.status, i.specialistFee, i.doctorFee, i.vatRate, i.vatAmount, i.isApproved ? 1 : 0, i.approvalDate, i.paymentDate, req.params.id
+    );
+    res.json({ success: true });
+  });
+
+  app.delete("/api/invoices/:id", (req, res) => {
+    db.prepare("DELETE FROM invoices WHERE id=?").run(req.params.id);
+    res.json({ success: true });
+  });
+
+  // TRANSACTIONS
+  app.get("/api/transactions", (req, res) => {
+    res.json(db.prepare("SELECT * FROM transactions").all());
+  });
+
+  app.post("/api/transactions", (req, res) => {
+    const t = req.body;
+    db.prepare(`
+      INSERT INTO transactions (id, firmId, firmName, type, date, amount, description)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(t.id, t.firmId, t.firmName, t.type, t.date, t.amount, t.description);
+    res.json({ success: true });
+  });
+
+  app.put("/api/transactions/:id", (req, res) => {
+    const t = req.body;
+    db.prepare(`
+      UPDATE transactions SET firmId=?, firmName=?, type=?, date=?, amount=?, description=?, updatedAt=CURRENT_TIMESTAMP
+      WHERE id=?
+    `).run(t.firmId, t.firmName, t.type, t.date, t.amount, t.description, req.params.id);
+    res.json({ success: true });
+  });
+
+  app.delete("/api/transactions/:id", (req, res) => {
+    db.prepare("DELETE FROM transactions WHERE id=?").run(req.params.id);
+    res.json({ success: true });
+  });
+
+  // EXPENSES & CATEGORIES
+  app.get("/api/expenses", (req, res) => res.json(db.prepare("SELECT * FROM expenses").all().map((e: any) => ({ ...e, isTaxDeductible: e.isTaxDeductible === 1 }))));
+  app.post("/api/expenses", (req, res) => {
+    const e = req.body;
+    db.prepare("INSERT INTO expenses (id, date, categoryId, amount, description, paymentMethod, documentNumber, isTaxDeductible, taxRate, taxAmount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(e.id, e.date, e.categoryId, e.amount, e.description, e.paymentMethod, e.documentNumber, e.isTaxDeductible ? 1 : 0, e.taxRate, e.taxAmount);
+    res.json({ success: true });
+  });
+  app.put("/api/expenses/:id", (req, res) => {
+    const e = req.body;
+    db.prepare("UPDATE expenses SET date=?, categoryId=?, amount=?, description=?, paymentMethod=?, documentNumber=?, isTaxDeductible=?, taxRate=?, taxAmount=?, updatedAt=CURRENT_TIMESTAMP WHERE id=?")
+      .run(e.date, e.categoryId, e.amount, e.description, e.paymentMethod, e.documentNumber, e.isTaxDeductible ? 1 : 0, e.taxRate, e.taxAmount, req.params.id);
+    res.json({ success: true });
+  });
+  app.delete("/api/expenses/:id", (req, res) => {
+    db.prepare("DELETE FROM expenses WHERE id=?").run(req.params.id);
+    res.json({ success: true });
+  });
+
+  app.get("/api/categories", (req, res) => res.json(db.prepare("SELECT * FROM categories").all()));
+  app.post("/api/categories", (req, res) => {
+    db.prepare("INSERT INTO categories (id, name) VALUES (?, ?)").run(req.body.id, req.body.name);
+    res.json({ success: true });
+  });
+  app.delete("/api/categories/:id", (req, res) => {
+    db.prepare("DELETE FROM categories WHERE id=?").run(req.params.id);
+    res.json({ success: true });
+  });
+
+  // SETTINGS
+  app.get("/api/settings", (req, res) => {
+    const s = db.prepare("SELECT value FROM settings WHERE key='global'").get() as any;
+    res.json(s ? JSON.parse(s.value) : {});
+  });
+  app.post("/api/settings", (req, res) => {
+    db.prepare("INSERT OR REPLACE INTO settings (key, value, updatedAt) VALUES ('global', ?, CURRENT_TIMESTAMP)").run(JSON.stringify(req.body));
+    res.json({ success: true });
+  });
+
+  // MASS IMPORT (For Backup Restore)
+  app.post("/api/restore", (req, res) => {
+    const { firms, transactions, invoices, expenses, categories, settings } = req.body;
+    db.transaction(() => {
+      if (firms) {
+        db.prepare("DELETE FROM firms").run();
+        const stmt = db.prepare("INSERT INTO firms (id, name, isVatIncluded, invoiceType, taxNumber, address, pricingModel, healthDataFee, employeeCount, parentFirmId, serviceType, hazardClass) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        firms.forEach((f: any) => stmt.run(f.id, f.name, f.isVatIncluded ? 1 : 0, f.invoiceType, f.taxNumber, f.address, JSON.stringify(f.pricingModel), f.healthDataFee, f.employeeCount, f.parentFirmId, f.serviceType, f.hazardClass));
+      }
+      if (invoices) {
+        db.prepare("DELETE FROM invoices").run();
+        const stmt = db.prepare("INSERT INTO invoices (id, firmId, firmName, invoiceType, date, employeeCount, baseAmount, healthAmount, totalAmount, isVatIncluded, status, specialistFee, doctorFee, vatRate, vatAmount, isApproved, approvalDate, paymentDate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        invoices.forEach((i: any) => stmt.run(i.id, i.firmId, i.firmName, i.invoiceType, i.date, i.employeeCount, i.baseAmount, i.healthAmount, i.totalAmount, i.isVatIncluded ? 1 : 0, i.status, i.specialistFee, i.doctorFee, i.vatRate, i.vatAmount, i.isApproved ? 1 : 0, i.approvalDate, i.paymentDate));
+      }
+      if (transactions) {
+        db.prepare("DELETE FROM transactions").run();
+        const stmt = db.prepare("INSERT INTO transactions (id, firmId, firmName, type, date, amount, description) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        transactions.forEach((t: any) => stmt.run(t.id, t.firmId, t.firmName, t.type, t.date, t.amount, t.description));
+      }
+      if (categories) {
+        db.prepare("DELETE FROM categories").run();
+        const stmt = db.prepare("INSERT INTO categories (id, name) VALUES (?, ?)");
+        categories.forEach((c: any) => stmt.run(c.id, c.name));
+      }
+      if (expenses) {
+        db.prepare("DELETE FROM expenses").run();
+        const stmt = db.prepare("INSERT INTO expenses (id, date, categoryId, amount, description, paymentMethod, documentNumber, isTaxDeductible, taxRate, taxAmount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        expenses.forEach((e: any) => stmt.run(e.id, e.date, e.categoryId, e.amount, e.description, e.paymentMethod, e.documentNumber, e.isTaxDeductible ? 1 : 0, e.taxRate, e.taxAmount));
+      }
+      if (settings) {
+        db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('global', ?)").run(JSON.stringify(settings));
+      }
+    })();
+    res.json({ success: true });
+  });
+
+  // SYSTEM ROUTES
+  app.get("/api/health", (req, res) => res.json({ status: "ok", timestamp: new Date().toISOString() }));
+  
   app.get("/api/system/git-status", async (req, res) => {
     try {
       await execPromise("git fetch origin main").catch(() => {});
       const { stdout } = await execPromise("git log HEAD..origin/main --oneline").catch(() => ({ stdout: "" }));
-      const commits = stdout.trim().split("\n").filter(Boolean);
-      return res.json({
-        success: true,
-        hasUpdates: commits.length > 0,
-        pendingCommitsCount: commits.length,
-        commits: commits.slice(0, 10),
-        message: commits.length > 0 
-          ? `GitHub üzerinde ${commits.length} adet yeni güncelleme bulundu!` 
-          : "Sisteminiz güncel! En son versiyonu kullanıyorsunuz."
-      });
-    } catch (error: any) {
-      return res.json({
-        success: true,
-        hasUpdates: false,
-        pendingCommitsCount: 0,
-        message: "Sistem güncel durumda.",
-        error: error.message
-      });
+      const commits = stdout.trim().split("\\n").filter(Boolean);
+      return res.json({ success: true, hasUpdates: commits.length > 0, pendingCommitsCount: commits.length, commits: commits.slice(0, 10), message: commits.length > 0 ? `\${commits.length} yeni güncelleme bulundu!` : "Sistem güncel." });
+    } catch (e: any) {
+      return res.json({ success: true, hasUpdates: false, pendingCommitsCount: 0, message: "Güncel", error: e.message });
     }
   });
 
-  // API Route: Automatic System Update (Git Pull + Build + PM2 Restart)
   app.post("/api/system/update", async (req, res) => {
-    console.log("[SYSTEM UPDATE] In-app update initiated by user...");
-    const logs: string[] = [];
-
-    try {
-      // Step 1: Git Pull
-      logs.push("1/3: GitHub'dan güncellemeler çekiliyor (git pull)...");
+    res.json({ success: true, message: "Güncelleme başladı", logs: [] });
+    setTimeout(async () => {
       try {
-        const gitRes = await execPromise("git pull origin main || git pull");
-        logs.push(`[Git Output] ${gitRes.stdout.trim() || gitRes.stderr.trim() || "Git güncel."}`);
-      } catch (gErr: any) {
-        logs.push(`[Git Warning] ${gErr.message || "Git güncellenemedi, yerel kodlar derlenecek."}`);
+        await execPromise("git pull origin main || git pull");
+        await execPromise("npm run build");
+        await execPromise("pm2 restart osgb-fatura-3002 || pm2 restart all");
+      } catch (e) {
+        console.error("Update failed", e);
       }
-
-      // Step 2: Build
-      logs.push("2/3: Uygulama derleniyor (npm run build)...");
-      const buildRes = await execPromise("npm run build");
-      logs.push(`[Build Output] Derleme başarıyla tamamlandı.`);
-
-      // Step 3: PM2 / Process Restart
-      logs.push("3/3: Servis yeniden başlatılıyor (PM2)...");
-
-      res.json({
-        success: true,
-        message: "Sistem güncellemesi ve derleme tamamlandı! Uygulama 2 saniye içinde yeniden başlayacak.",
-        logs
-      });
-
-      // Trigger restart asynchronously after response is sent
-      setTimeout(async () => {
-        try {
-          await execPromise("pm2 restart osgb-fatura-3002 || pm2 restart all");
-        } catch {
-          console.log("[SYSTEM UPDATE] PM2 restart command failed or PM2 not installed.");
-        }
-      }, 1500);
-
-    } catch (err: any) {
-      console.error("[SYSTEM UPDATE ERROR]", err);
-      return res.status(500).json({
-        success: false,
-        error: `Güncelleme Hatası: ${err.message}`,
-        logs
-      });
-    }
+    }, 1500);
   });
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
+    const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+    app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
+    console.log(`Server running on http://0.0.0.0:\${PORT}`);
   });
 }
 

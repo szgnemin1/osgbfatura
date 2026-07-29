@@ -394,24 +394,39 @@ export default function InvoicePrepView({
   };
 
   // Helper to find firm by flexible name/ID matching
-  const findMatchingFirm = (rawName: string) => {
+  const findMatchingFirm = (rawName: string, hazardClass?: string) => {
     if (!rawName) return null;
     const trimmed = rawName.trim();
     const normRaw = normalizeString(trimmed);
     const cleanRaw = cleanCorporateFluff(trimmed);
 
-    // 1. Exact ID or exact name match
-    let matched = firms.find(f => f.id === trimmed || f.name.toLowerCase().trim() === trimmed.toLowerCase());
-    if (matched) return matched;
+    // 1. Exact ID or exact name match (with hazard class fallback)
+    let candidates = firms.filter(f => f.id === trimmed || f.name.toLowerCase().trim() === trimmed.toLowerCase());
+    
+    // If hazard class is provided, prioritize match with same hazard class
+    if (hazardClass && candidates.length > 0) {
+      const hazardMatch = candidates.find(f => f.hazardClass === hazardClass);
+      if (hazardMatch) return hazardMatch;
+    }
+    
+    if (candidates.length > 0) return candidates[0];
 
     // 2. Normalized name match
-    matched = firms.find(f => normalizeString(f.name) === normRaw);
-    if (matched) return matched;
+    candidates = firms.filter(f => normalizeString(f.name) === normRaw);
+    if (hazardClass && candidates.length > 0) {
+      const hazardMatch = candidates.find(f => f.hazardClass === hazardClass);
+      if (hazardMatch) return hazardMatch;
+    }
+    if (candidates.length > 0) return candidates[0];
 
     // 3. Clean corporate fluff match
     if (cleanRaw.length >= 2) {
-      matched = firms.find(f => cleanCorporateFluff(f.name) === cleanRaw);
-      if (matched) return matched;
+      candidates = firms.filter(f => cleanCorporateFluff(f.name) === cleanRaw);
+      if (hazardClass && candidates.length > 0) {
+        const hazardMatch = candidates.find(f => f.hazardClass === hazardClass);
+        if (hazardMatch) return hazardMatch;
+      }
+      if (candidates.length > 0) return candidates[0];
     }
 
     // 4. Token overlap match (e.g. "MAZ MEDİKAL GIDA" vs "MAZ MEDİKAL")
@@ -433,11 +448,11 @@ export default function InvoicePrepView({
     }
 
     // 5. Substring / Inclusion match
-    matched = firms.find(f => {
+    candidates = firms.filter(f => {
       const normFirm = normalizeString(f.name);
       const cleanFirm = cleanCorporateFluff(f.name);
       
-      if (normFirm.length > 3 && normRaw.length > 3) {
+      if (normFirm.length >= 3 && normRaw.length >= 3) {
         if (normFirm.includes(normRaw) || normRaw.includes(normFirm)) return true;
       }
       if (cleanFirm.length >= 2 && cleanRaw.length >= 2) {
@@ -446,7 +461,12 @@ export default function InvoicePrepView({
       return false;
     });
 
-    return matched || null;
+    if (hazardClass && candidates.length > 0) {
+      const hazardMatch = candidates.find(f => f.hazardClass === hazardClass);
+      if (hazardMatch) return hazardMatch;
+    }
+
+    return candidates.length > 0 ? candidates[0] : null;
   };
 
   // Smart line splitter for plain text and CSV input
@@ -520,6 +540,7 @@ export default function InvoicePrepView({
     let nameColIndex = -1;
     let countColIndex = -1;
     let healthColIndex = -1;
+    let hazardClassColIndex = -1;
 
     // Scan top 10 rows for header keywords
     for (let r = 0; r < Math.min(validRows.length, 10); r++) {
@@ -579,12 +600,25 @@ export default function InvoicePrepView({
         if (
           cellStr.includes('ekstra tutar') ||
           cellStr.includes('sağlık tutarı') ||
+          cellStr.includes('saYlk tutar') ||
           cellStr.includes('ek tutar') ||
           cellStr.includes('saglik') ||
           cellStr.includes('tutar')
         ) {
           if (healthColIndex === -1) {
             healthColIndex = cIndex;
+          }
+        }
+        
+        // Hazard class
+        if (
+          cellStr.includes('tehlike sınıfı') ||
+          cellStr.includes('tehlike snf') ||
+          cellStr.includes('tehlike') ||
+          cellStr.includes('hazard')
+        ) {
+          if (hazardClassColIndex === -1) {
+            hazardClassColIndex = cIndex;
           }
         }
       });
@@ -608,6 +642,7 @@ export default function InvoicePrepView({
 
         const rawName = String(row[nameColIndex] || '').trim();
         const rawCountStr = row[countColIndex];
+        const rawHazardClass = hazardClassColIndex !== -1 ? String(row[hazardClassColIndex] || '').trim() : undefined;
 
         if (!rawName) return;
 
@@ -615,7 +650,7 @@ export default function InvoicePrepView({
         if (parsedCount === null) return;
 
         const normRaw = normalizeString(rawName);
-        const matchedFirm = findMatchingFirm(rawName);
+        const matchedFirm = findMatchingFirm(rawName, rawHazardClass);
 
         if (matchedFirm) {
           let healthAmount = newInputs[matchedFirm.id]?.healthAmount || 0;
@@ -624,8 +659,7 @@ export default function InvoicePrepView({
             if (hVal !== null) healthAmount = hVal;
           }
 
-          const currentAcc = firmCountAcc[matchedFirm.id] ?? 0;
-          const newTotal = currentAcc + parsedCount;
+          const newTotal = parsedCount; // Excel employee count is always right
           firmCountAcc[matchedFirm.id] = newTotal;
           rowMatchCount[matchedFirm.id] = (rowMatchCount[matchedFirm.id] || 0) + 1;
 
@@ -703,8 +737,7 @@ export default function InvoicePrepView({
         const matchedFirm = findMatchingFirm(rawName);
 
         if (matchedFirm) {
-          const currentAcc = firmCountAcc[matchedFirm.id] ?? 0;
-          const newTotal = currentAcc + parsedCount;
+          const newTotal = parsedCount; // Excel employee count is always right
           firmCountAcc[matchedFirm.id] = newTotal;
           rowMatchCount[matchedFirm.id] = (rowMatchCount[matchedFirm.id] || 0) + 1;
 

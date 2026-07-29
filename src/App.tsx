@@ -43,6 +43,7 @@ import {
   initialFirms, 
   generateInitialHistory 
 } from './initialData';
+import { api } from './api';
 
 // Component imports
 import DashboardView from './components/DashboardView';
@@ -55,85 +56,60 @@ import ExpenseManagementView from './components/ExpenseManagementView';
 import SettingsView from './components/SettingsView';
 
 export default function App() {
-  // 1. Initial State Load (loading from localStorage, falling back to seed history)
-  const [firms, setFirms] = useState<Firm[]>(() => {
-    try {
-      const saved = localStorage.getItem('fcts_firms');
-      if (!saved) return initialFirms;
-      const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? parsed : initialFirms;
-    } catch {
-      return initialFirms;
-    }
+  // 1. Initial State Load (via API)
+  const [firms, setFirms] = useState<Firm[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [categories, setCategories] = useState<ExpenseCategory[]>([]);
+  
+  const [settings, setSettings] = useState<SystemSettings>({
+    uzmanPercentage: 60,
+    hekimPercentage: 40,
+    kdvRate: 20,
+    vatRateExpert: 20,
+    vatRateDoctor: 10,
+    vatRateHealth: 10,
+    simpleDebtMode: false,
+    vpsServerUrl: '/api/health-sync/latest',
+    vpsApiKey: 'vps_secure_secret_2026'
   });
 
-  const [invoices, setInvoices] = useState<Invoice[]>(() => {
-    try {
-      const saved = localStorage.getItem('fcts_invoices');
-      if (!saved) return generateInitialHistory().invoices;
-      const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? parsed : generateInitialHistory().invoices;
-    } catch {
-      return generateInitialHistory().invoices;
-    }
-  });
+  const [isDbLoaded, setIsDbLoaded] = useState(false);
 
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    try {
-      const saved = localStorage.getItem('fcts_transactions');
-      if (!saved) return generateInitialHistory().transactions;
-      const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? parsed : generateInitialHistory().transactions;
-    } catch {
-      return generateInitialHistory().transactions;
-    }
-  });
-
-  const [expenses, setExpenses] = useState<Expense[]>(() => {
-    try {
-      const saved = localStorage.getItem('fcts_expenses');
-      if (!saved) return initialExpenses;
-      const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? parsed : initialExpenses;
-    } catch {
-      return initialExpenses;
-    }
-  });
-
-  const [categories, setCategories] = useState<ExpenseCategory[]>(() => {
-    try {
-      const saved = localStorage.getItem('fcts_categories');
-      if (!saved) return initialExpenseCategories;
-      const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? parsed : initialExpenseCategories;
-    } catch {
-      return initialExpenseCategories;
-    }
-  });
-
-  const [settings, setSettings] = useState<SystemSettings>(() => {
-    const saved = localStorage.getItem('fcts_settings');
-    const defaults = {
-      uzmanPercentage: 60,
-      hekimPercentage: 40,
-      kdvRate: 20,
-      vatRateExpert: 20,
-      vatRateDoctor: 10,
-      vatRateHealth: 10,
-      simpleDebtMode: false,
-      vpsServerUrl: '/api/health-sync/latest',
-      vpsApiKey: 'vps_secure_secret_2026'
-    };
-    if (saved) {
+  useEffect(() => {
+    const loadDb = async () => {
       try {
-        const parsed = JSON.parse(saved);
-        return { ...defaults, ...parsed };
-      } catch (e) {
-        return defaults;
+        const [
+          dbFirms,
+          dbInvoices,
+          dbTransactions,
+          dbExpenses,
+          dbCategories,
+          dbSettings
+        ] = await Promise.all([
+          api.getFirms(),
+          api.getInvoices(),
+          api.getTransactions(),
+          api.getExpenses(),
+          api.getCategories(),
+          api.getSettings()
+        ]);
+        
+        setFirms(dbFirms);
+        setInvoices(dbInvoices);
+        setTransactions(dbTransactions);
+        setExpenses(dbExpenses);
+        setCategories(dbCategories);
+        setSettings(dbSettings);
+      } catch (err) {
+        console.error('Failed to load DB data:', err);
+      } finally {
+        setIsDbLoaded(true);
       }
-    }
-    return defaults;
-  });
+    };
+    loadDb();
+  }, []);
 
   // Current active page tab (1: Ana Sayfa, 2: Fiyatlandırma, 3: Fatura Hazırlık, 4: Kesilecek Fatura, 5: Cari Detay, 6: Borç Takip, 7: Gider Yönetimi)
   const [activeTab, setActiveTab] = useState<number>(1);
@@ -165,31 +141,6 @@ export default function App() {
   const [simulatedAmount, setSimulatedAmount] = useState('');
   const [isSimulatingPost, setIsSimulatingPost] = useState(false);
 
-  // 2. Sync to localStorage on every state change
-  useEffect(() => {
-    localStorage.setItem('fcts_firms', JSON.stringify(firms));
-  }, [firms]);
-
-  useEffect(() => {
-    localStorage.setItem('fcts_invoices', JSON.stringify(invoices));
-  }, [invoices]);
-
-  useEffect(() => {
-    localStorage.setItem('fcts_transactions', JSON.stringify(transactions));
-  }, [transactions]);
-
-  useEffect(() => {
-    localStorage.setItem('fcts_expenses', JSON.stringify(expenses));
-  }, [expenses]);
-
-  useEffect(() => {
-    localStorage.setItem('fcts_categories', JSON.stringify(categories));
-  }, [categories]);
-
-  useEffect(() => {
-    localStorage.setItem('fcts_settings', JSON.stringify(settings));
-  }, [settings]);
-
   // Load form values once settings state is populated
   useEffect(() => {
     setSettingsUzman(settings.uzmanPercentage);
@@ -206,7 +157,7 @@ export default function App() {
   // 3. State Actions & Handlers
 
   // Save general settings
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     if (settingsUzman + settingsHekim !== 100) {
       alert('Hata: Uzman ve Hekim yüzdelerinin toplamı 100 olmalıdır!');
@@ -226,6 +177,17 @@ export default function App() {
     });
     
     setShowSettingsModal(false);
+    await api.updateSettings({
+      uzmanPercentage: settingsUzman,
+      hekimPercentage: settingsHekim,
+      kdvRate: settingsKdv,
+      vatRateExpert: settingsVatExpert,
+      vatRateDoctor: settingsVatDoctor,
+      vatRateHealth: settingsVatHealth,
+      simpleDebtMode: settingsSimpleDebtMode,
+      vpsServerUrl: settingsVpsUrl,
+      vpsApiKey: settingsVpsKey
+    });
     alert('Sistem ve VPS entegrasyon parametreleri başarıyla güncellendi.');
   };
 
@@ -366,12 +328,12 @@ export default function App() {
   };
 
   // Upload and parse JSON backup, restoring system state
-  const handleUploadBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const data = JSON.parse(event.target?.result as string);
         if (!data || !Array.isArray(data.firms)) {
@@ -555,6 +517,7 @@ export default function App() {
           setInvoices(restoredInvoices);
           setTransactions(restoredTransactions);
 
+          await api.restoreBackup({ firms: parsedFirms, transactions: restoredTransactions, invoices: restoredInvoices, expenses: data.expenses || [], categories: data.expenseCategories || [], settings: data.globalSettings || {} });
           alert('Yedek başarıyla geri yüklendi!');
           setShowSettingsModal(false);
         }
@@ -567,25 +530,28 @@ export default function App() {
   };
 
   // Add/Save Firm configuration
-  const handleSaveFirm = (updatedFirm: Firm) => {
+  const handleSaveFirm = async (updatedFirm: Firm) => {
     setFirms(prev => prev.map(f => f.id === updatedFirm.id ? updatedFirm : f));
+    await api.updateFirm(updatedFirm);
   };
 
   // Delete an existing firm
-  const handleDeleteFirm = (firmId: string) => {
+  const handleDeleteFirm = async (firmId: string) => {
     const firmToDelete = firms.find(f => f.id === firmId);
     if (!firmToDelete) return;
 
     if (confirm(`"${firmToDelete.name}" firmasını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) {
       setFirms(prev => prev.filter(f => f.id !== firmId));
+      await api.deleteFirm(firmId);
       alert(`"${firmToDelete.name}" firması sistemden silindi.`);
     }
   };
 
   // Add a brand new firm
-  const handleAddFirm = (firmOrName: Firm | string) => {
+  const handleAddFirm = async (firmOrName: Firm | string) => {
     if (typeof firmOrName === 'object' && firmOrName !== null) {
       setFirms(prev => [...prev, firmOrName]);
+      await api.addFirm(firmOrName);
     } else {
       const newFirm: Firm = {
         id: `firm-${Date.now()}`,
@@ -606,7 +572,7 @@ export default function App() {
   };
 
   // Sent from Fatura Hazırlık page into pending approval queue
-  const handleSendToIssue = (draftInv: Partial<Invoice>) => {
+  const handleSendToIssue = async (draftInv: Partial<Invoice>) => {
     const fullInvoice: Invoice = {
       ...draftInv,
       id: `inv-draft-${Date.now()}`,
@@ -616,6 +582,7 @@ export default function App() {
     } as Invoice;
 
     setInvoices(prev => [fullInvoice, ...prev]);
+    await api.addInvoice(fullInvoice);
 
     // Update the last entered employee count for this firm
     if (draftInv.firmId && draftInv.employeeCount !== undefined) {
@@ -624,12 +591,14 @@ export default function App() {
   };
 
   // Approve invoice (Move from pending queue to Cari Detay / approved)
-  const handleApproveInvoice = (id: string) => {
+  const handleApproveInvoice = async (id: string) => {
     const target = invoices.find(i => i.id === id);
     if (!target) return;
 
     // 1. Mark as approved
     setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, status: 'approved', isApproved: true, approvalDate: '2026-07-07' } : inv));
+    const targetInv = invoices.find(i => i.id === id);
+    if(targetInv) await api.updateInvoice({ ...targetInv, status: 'approved', isApproved: true, approvalDate: '2026-07-07' });
 
     // 2. Post as ledger charge transaction (Invoiced)
     const newTx: Transaction = {
@@ -642,24 +611,27 @@ export default function App() {
       description: `${target.date} Tarihli Hizmet Faturası`
     };
     setTransactions(prev => [...prev, newTx]);
+    await api.addTransaction(newTx);
   };
 
   // Remove draft/unapproved invoice from the queue
-  const handleRemoveInvoiceFromQueue = (id: string) => {
+  const handleRemoveInvoiceFromQueue = async (id: string) => {
     setInvoices(prev => prev.filter(inv => inv.id !== id));
+    await api.deleteInvoice(id);
   };
 
   // Manual transaction addition (Cari Detay Add Debt or Collection)
-  const handleAddManualTransaction = (newTx: Omit<Transaction, 'id'>) => {
+  const handleAddManualTransaction = async (newTx: Omit<Transaction, 'id'>) => {
     const tx: Transaction = {
       ...newTx,
       id: `tx-manual-${Date.now()}`
     };
     setTransactions(prev => [...prev, tx]);
+    await api.addTransaction(tx);
   };
 
   // Edit existing manual/any transaction
-  const handleEditTransaction = (id: string, updatedTx: Partial<Transaction>) => {
+  const handleEditTransaction = async (id: string, updatedTx: Partial<Transaction>) => {
     const originalTx = transactions.find(t => t.id === id);
     if (originalTx) {
       if (originalTx.type === 'invoice') {
@@ -685,10 +657,12 @@ export default function App() {
       }
     }
     setTransactions(prev => prev.map(t => t.id === id ? { ...t, ...updatedTx } : t));
+    const targetTx = transactions.find(t => t.id === id);
+    if (targetTx) await api.updateTransaction({ ...targetTx, ...updatedTx });
   };
 
   // Delete transaction
-  const handleDeleteTransaction = (id: string) => {
+  const handleDeleteTransaction = async (id: string) => {
     const targetTx = transactions.find(t => t.id === id);
     if (targetTx) {
       if (targetTx.type === 'invoice') {
@@ -716,15 +690,18 @@ export default function App() {
       }
     }
     setTransactions(prev => prev.filter(t => t.id !== id));
+    await api.deleteTransaction(id);
   };
 
   // Mark invoice paid from Cari Detay
-  const handleMarkInvoicePaid = (invoiceId: string) => {
+  const handleMarkInvoicePaid = async (invoiceId: string) => {
     const target = invoices.find(i => i.id === invoiceId);
     if (!target) return;
 
     // 1. Mark invoice as paid
     setInvoices(prev => prev.map(inv => inv.id === invoiceId ? { ...inv, status: 'paid', paymentDate: '2026-07-07' } : inv));
+    const targetInv = invoices.find(i => i.id === invoiceId);
+    if(targetInv) await api.updateInvoice({ ...targetInv, status: 'paid', paymentDate: '2026-07-07' });
 
     // 2. Log corresponding payment transaction to balance the ledger
     const newTx: Transaction = {
@@ -737,39 +714,46 @@ export default function App() {
       description: `${target.date} Fatura Tahsilat Kapama`
     };
     setTransactions(prev => [...prev, newTx]);
+    await api.addTransaction(newTx);
   };
 
   // Add a new expense record
-  const handleAddExpense = (newExp: Omit<Expense, 'id'>) => {
+  const handleAddExpense = async (newExp: Omit<Expense, 'id'>) => {
     const exp: Expense = {
       ...newExp,
       id: `exp-${Date.now()}`
     };
     setExpenses(prev => [...prev, exp]);
+    await api.addExpense(exp);
   };
 
   // Edit an existing expense record
-  const handleEditExpense = (id: string, updatedExp: Partial<Expense>) => {
+  const handleEditExpense = async (id: string, updatedExp: Partial<Expense>) => {
     setExpenses(prev => prev.map(exp => exp.id === id ? { ...exp, ...updatedExp } : exp));
+    const target = expenses.find(e => e.id === id);
+    if (target) await api.updateExpense({ ...target, ...updatedExp });
   };
 
   // Delete an expense record
-  const handleDeleteExpense = (id: string) => {
+  const handleDeleteExpense = async (id: string) => {
     setExpenses(prev => prev.filter(exp => exp.id !== id));
+    await api.deleteExpense(id);
   };
 
   // Add a new expense category
-  const handleAddExpenseCategory = (name: string) => {
+  const handleAddExpenseCategory = async (name: string) => {
     const cat: ExpenseCategory = {
       id: `cat-${Date.now()}`,
       name
     };
     setCategories(prev => [...prev, cat]);
+    await api.addCategory(cat);
   };
 
   // Delete an expense category
-  const handleDeleteExpenseCategory = (id: string) => {
+  const handleDeleteExpenseCategory = async (id: string) => {
     setCategories(prev => prev.filter(c => c.id !== id));
+    await api.deleteCategory(id);
   };
 
   // Live calculator to compute actual outstanding debt (Cari bakiye)
@@ -790,6 +774,8 @@ export default function App() {
   // Queue badge size
   const pendingQueueCount = invoices.filter(inv => inv.status === 'pending_approval').length;
 
+  if (!isDbLoaded) return <div className="flex items-center justify-center h-screen bg-[#050505] text-white">Veritabanı bağlantısı kuruluyor...</div>;
+  
   return (
     <div className="flex h-screen bg-[#050505] font-sans text-neutral-200 overflow-hidden relative" id="main-layout">
       {/* 1. SIDEBAR NAVIGATION */}
