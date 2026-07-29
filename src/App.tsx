@@ -57,28 +57,58 @@ import SettingsView from './components/SettingsView';
 export default function App() {
   // 1. Initial State Load (loading from localStorage, falling back to seed history)
   const [firms, setFirms] = useState<Firm[]>(() => {
-    const saved = localStorage.getItem('fcts_firms');
-    return saved ? JSON.parse(saved) : initialFirms;
+    try {
+      const saved = localStorage.getItem('fcts_firms');
+      if (!saved) return initialFirms;
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : initialFirms;
+    } catch {
+      return initialFirms;
+    }
   });
 
   const [invoices, setInvoices] = useState<Invoice[]>(() => {
-    const saved = localStorage.getItem('fcts_invoices');
-    return saved ? JSON.parse(saved) : generateInitialHistory().invoices;
+    try {
+      const saved = localStorage.getItem('fcts_invoices');
+      if (!saved) return generateInitialHistory().invoices;
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : generateInitialHistory().invoices;
+    } catch {
+      return generateInitialHistory().invoices;
+    }
   });
 
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    const saved = localStorage.getItem('fcts_transactions');
-    return saved ? JSON.parse(saved) : generateInitialHistory().transactions;
+    try {
+      const saved = localStorage.getItem('fcts_transactions');
+      if (!saved) return generateInitialHistory().transactions;
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : generateInitialHistory().transactions;
+    } catch {
+      return generateInitialHistory().transactions;
+    }
   });
 
   const [expenses, setExpenses] = useState<Expense[]>(() => {
-    const saved = localStorage.getItem('fcts_expenses');
-    return saved ? JSON.parse(saved) : initialExpenses;
+    try {
+      const saved = localStorage.getItem('fcts_expenses');
+      if (!saved) return initialExpenses;
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : initialExpenses;
+    } catch {
+      return initialExpenses;
+    }
   });
 
   const [categories, setCategories] = useState<ExpenseCategory[]>(() => {
-    const saved = localStorage.getItem('fcts_categories');
-    return saved ? JSON.parse(saved) : initialExpenseCategories;
+    try {
+      const saved = localStorage.getItem('fcts_categories');
+      if (!saved) return initialExpenseCategories;
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : initialExpenseCategories;
+    } catch {
+      return initialExpenseCategories;
+    }
   });
 
   const [settings, setSettings] = useState<SystemSettings>(() => {

@@ -40,7 +40,7 @@ export default function SettingsView() {
       return;
     }
 
-    if (updateUsername.toLowerCase() !== currentUser?.toLowerCase() && users.some(u => u.username.toLowerCase() === updateUsername.toLowerCase())) {
+    if (updateUsername.toLowerCase() !== currentUser?.toLowerCase() && users.some(u => u.username?.toLowerCase() === updateUsername.toLowerCase())) {
       setUpdateError('Bu kullanıcı adı zaten alınmış.');
       return;
     }
@@ -153,7 +153,7 @@ export default function SettingsView() {
     setUserError('');
     setUserSuccess('');
 
-    if (users.some(u => u.username.toLowerCase() === newUsername.toLowerCase())) {
+    if (users.some(u => u.username?.toLowerCase() === newUsername.toLowerCase())) {
       setUserError('Bu kullanıcı adı zaten alınmış.');
       return;
     }

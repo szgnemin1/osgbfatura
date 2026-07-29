@@ -55,7 +55,19 @@ export default function AuthWrapper({ children }: { children: React.ReactNode })
     // Load users from localStorage or set defaults
     const savedUsers = localStorage.getItem('mock_users');
     if (savedUsers) {
-      setUsersState(JSON.parse(savedUsers));
+      try {
+        const parsed = JSON.parse(savedUsers);
+        if (Array.isArray(parsed)) {
+          setUsersState(parsed);
+        } else {
+          setUsersState(defaultUsers);
+          localStorage.setItem('mock_users', JSON.stringify(defaultUsers));
+        }
+      } catch (e) {
+        console.error('Failed to parse mock_users, resetting to defaults', e);
+        setUsersState(defaultUsers);
+        localStorage.setItem('mock_users', JSON.stringify(defaultUsers));
+      }
     } else {
       setUsersState(defaultUsers);
       localStorage.setItem('mock_users', JSON.stringify(defaultUsers));
@@ -75,7 +87,7 @@ export default function AuthWrapper({ children }: { children: React.ReactNode })
     e.preventDefault();
     setError('');
     
-    const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
+    const user = users.find(u => u.username?.toLowerCase() === username.toLowerCase());
     
     if (user && user.pin === pin) {
       if (user.twoFactorEnabled && user.twoFactorSecret) {
@@ -96,7 +108,7 @@ export default function AuthWrapper({ children }: { children: React.ReactNode })
     e.preventDefault();
     setError('');
 
-    const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
+    const user = users.find(u => u.username?.toLowerCase() === username.toLowerCase());
     
     if (!user || !user.twoFactorSecret) {
       setError('Güvenlik hatası oluştu.');

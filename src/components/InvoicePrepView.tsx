@@ -80,7 +80,9 @@ export default function InvoicePrepView({
   const [processedMsgIds, setProcessedMsgIds] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem('processed_health_msg_ids');
-      return saved ? new Set(JSON.parse(saved)) : new Set();
+      if (!saved) return new Set();
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? new Set(parsed) : new Set();
     } catch {
       return new Set();
     }
@@ -253,16 +255,18 @@ export default function InvoicePrepView({
       const saved = localStorage.getItem('fcts_firm_inputs');
       if (saved) {
         const parsed = JSON.parse(saved);
-        firms.forEach(f => {
-          if (!parsed[f.id]) {
-            parsed[f.id] = {
-              employeeCount: f.employeeCount || 10,
-              healthAmount: 0,
-              extraNote: ''
-            };
-          }
-        });
-        return parsed;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          firms.forEach(f => {
+            if (!parsed[f.id]) {
+              parsed[f.id] = {
+                employeeCount: f.employeeCount || 10,
+                healthAmount: 0,
+                extraNote: ''
+              };
+            }
+          });
+          return parsed;
+        }
       }
     } catch (e) {
       console.error("Error reading firmInputs from localStorage", e);
