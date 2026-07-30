@@ -400,21 +400,31 @@ export default function InvoicePrepView({
     const normRaw = normalizeString(trimmed);
     const cleanRaw = cleanCorporateFluff(trimmed);
 
+    let normHazard = '';
+    if (hazardClass) {
+      const lower = hazardClass.toLowerCase().replace(/i̇/g, 'i').replace(/ı/g, 'i');
+      if (lower.includes('çok') || lower.includes('cok')) normHazard = 'ÇOK TEHLİKELİ';
+      else if (lower.includes('az')) normHazard = 'AZ TEHLİKELİ';
+      else if (lower.includes('tehlike')) normHazard = 'TEHLİKELİ';
+    }
+
+    const checkHazard = (f: Firm) => {
+      if (!normHazard) return false;
+      return f.hazardClass === normHazard;
+    };
+
     // 1. Exact ID or exact name match (with hazard class fallback)
     let candidates = firms.filter(f => f.id === trimmed || f.name.toLowerCase().trim() === trimmed.toLowerCase());
-    
-    // If hazard class is provided, prioritize match with same hazard class
-    if (hazardClass && candidates.length > 0) {
-      const hazardMatch = candidates.find(f => f.hazardClass === hazardClass);
+    if (normHazard && candidates.length > 0) {
+      const hazardMatch = candidates.find(checkHazard);
       if (hazardMatch) return hazardMatch;
     }
-    
     if (candidates.length > 0) return candidates[0];
 
     // 2. Normalized name match
     candidates = firms.filter(f => normalizeString(f.name) === normRaw);
-    if (hazardClass && candidates.length > 0) {
-      const hazardMatch = candidates.find(f => f.hazardClass === hazardClass);
+    if (normHazard && candidates.length > 0) {
+      const hazardMatch = candidates.find(checkHazard);
       if (hazardMatch) return hazardMatch;
     }
     if (candidates.length > 0) return candidates[0];
@@ -422,8 +432,8 @@ export default function InvoicePrepView({
     // 3. Clean corporate fluff match
     if (cleanRaw.length >= 2) {
       candidates = firms.filter(f => cleanCorporateFluff(f.name) === cleanRaw);
-      if (hazardClass && candidates.length > 0) {
-        const hazardMatch = candidates.find(f => f.hazardClass === hazardClass);
+      if (normHazard && candidates.length > 0) {
+        const hazardMatch = candidates.find(checkHazard);
         if (hazardMatch) return hazardMatch;
       }
       if (candidates.length > 0) return candidates[0];
@@ -432,7 +442,7 @@ export default function InvoicePrepView({
     // 4. Token overlap match (e.g. "MAZ MEDİKAL GIDA" vs "MAZ MEDİKAL")
     const rawTokens = cleanRaw.split(' ').filter(t => t.length > 2);
     if (rawTokens.length > 0) {
-      matched = firms.find(f => {
+      let matched = firms.filter(f => {
         const firmClean = cleanCorporateFluff(f.name);
         const firmTokens = firmClean.split(' ').filter(t => t.length > 2);
         if (firmTokens.length === 0) return false;
@@ -444,7 +454,11 @@ export default function InvoicePrepView({
         }
         return false;
       });
-      if (matched) return matched;
+      if (normHazard && matched.length > 0) {
+        const hazardMatch = matched.find(checkHazard);
+        if (hazardMatch) return hazardMatch;
+      }
+      if (matched.length > 0) return matched[0];
     }
 
     // 5. Substring / Inclusion match
@@ -461,8 +475,8 @@ export default function InvoicePrepView({
       return false;
     });
 
-    if (hazardClass && candidates.length > 0) {
-      const hazardMatch = candidates.find(f => f.hazardClass === hazardClass);
+    if (normHazard && candidates.length > 0) {
+      const hazardMatch = candidates.find(checkHazard);
       if (hazardMatch) return hazardMatch;
     }
 
@@ -474,14 +488,14 @@ export default function InvoicePrepView({
     const trimmed = line.trim();
     if (!trimmed) return [];
 
-    // Delimited splits
-    if (trimmed.includes('\t')) return trimmed.split('\t').map(s => s.trim()).filter(Boolean);
-    if (trimmed.includes(';')) return trimmed.split(';').map(s => s.trim()).filter(Boolean);
-    if (trimmed.includes('|')) return trimmed.split('|').map(s => s.trim()).filter(Boolean);
+    // Delimited splits (preserve empty columns to keep index alignment!)
+    if (trimmed.includes('\t')) return trimmed.split('\t').map(s => s.trim());
+    if (trimmed.includes(';')) return trimmed.split(';').map(s => s.trim());
+    if (trimmed.includes('|')) return trimmed.split('|').map(s => s.trim());
     
     // Comma split
     if (trimmed.includes(',')) {
-      const parts = trimmed.split(',').map(s => s.trim()).filter(Boolean);
+      const parts = trimmed.split(',').map(s => s.trim());
       if (parts.length > 1) return parts;
     }
 

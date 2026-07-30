@@ -490,7 +490,7 @@ export default function App() {
                     });
                   }
                 }
-              } else if (txType === 'TAHSILAT' || txType === 'ODEME' || txType === 'PAYMENT') {
+              } else if (txType.includes('TAHS') || txType === 'ODEME' || txType === 'PAYMENT' || txType === 'ÖDEME') {
                 restoredTransactions.push({
                   id: tx.id || `tx-${Date.now()}-${Math.random()}`,
                   firmId: fId,
@@ -500,7 +500,7 @@ export default function App() {
                   amount: tx.credit || tx.amount || 0,
                   description: tx.description || 'Ödeme Tahsilatı'
                 });
-              } else if (txType === 'BORC' || txType === 'DEBT') {
+              } else if (txType.includes('BOR') || txType === 'DEBT' || txType === 'DEVİR') {
                 restoredTransactions.push({
                   id: tx.id || `tx-${Date.now()}-${Math.random()}`,
                   firmId: fId,

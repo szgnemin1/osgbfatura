@@ -53,7 +53,7 @@ export default function ExpenseManagementView({
   const [selectedCatId, setSelectedCatId] = useState('');
   const [expAmount, setExpAmount] = useState('');
   const [expDate, setExpDate] = useState('2026-07-07');
-  const [expNote, setExpNote] = useState('');
+  const [expDesc, setExpDesc] = useState('');
   const [catSearchTerm, setCatSearchTerm] = useState('');
   const [isCatDropdownOpen, setIsCatDropdownOpen] = useState(false);
 
@@ -65,7 +65,7 @@ export default function ExpenseManagementView({
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [editAmount, setEditAmount] = useState('');
   const [editDate, setEditDate] = useState('');
-  const [editNote, setEditNote] = useState('');
+  const [editDesc, setEditDesc] = useState('');
   const [editCategoryId, setEditCategoryId] = useState('');
 
   // Deletion confirmation
@@ -150,12 +150,12 @@ export default function ExpenseManagementView({
       categoryName: cat.name,
       date: expDate,
       amount: Number(expAmount),
-      note: expNote
+      description: expDesc
     });
 
     showNotification(`${formatLira(Number(expAmount))} tutarındaki "${cat.name}" gider kaydı başarıyla eklendi.`);
     setExpAmount('');
-    setExpNote('');
+    setExpDesc('');
     setSelectedCatId('');
     setCatSearchTerm('');
   };
@@ -164,7 +164,7 @@ export default function ExpenseManagementView({
     setEditingExpense(exp);
     setEditAmount(String(exp.amount));
     setEditDate(exp.date);
-    setEditNote(exp.note);
+    setEditDesc(exp.description);
     setEditCategoryId(exp.categoryId);
   };
 
@@ -184,7 +184,7 @@ export default function ExpenseManagementView({
       categoryName: cat.name,
       amount: Number(editAmount),
       date: editDate,
-      note: editNote
+      description: editDesc
     });
 
     setEditingExpense(null);
@@ -205,7 +205,7 @@ export default function ExpenseManagementView({
   // Filtered expenses list for viewing
   const filteredExpenses = useMemo(() => {
     return expenses.filter(exp => {
-      const matchesSearch = exp.note.toLowerCase().includes(ledgerSearchTerm.toLowerCase()) ||
+      const matchesSearch = exp.description.toLowerCase().includes(ledgerSearchTerm.toLowerCase()) ||
                             exp.categoryName.toLowerCase().includes(ledgerSearchTerm.toLowerCase()) ||
                             exp.date.includes(ledgerSearchTerm);
       const matchesCategory = selectedCategoryFilter === 'all' || exp.categoryId === selectedCategoryFilter;
@@ -583,8 +583,8 @@ export default function ExpenseManagementView({
                       <textarea
                         rows={3}
                         placeholder="Örn: Fatura No: 9942, Akaryakıt fişi vb."
-                        value={expNote}
-                        onChange={(e) => setExpNote(e.target.value)}
+                        value={expDesc}
+                        onChange={(e) => setExpDesc(e.target.value)}
                         className="w-full px-3 py-2 text-xs border border-neutral-800 rounded-xl bg-neutral-900 text-white focus:outline-none focus:border-rose-500 resize-none"
                       />
                     </div>
@@ -708,7 +708,7 @@ export default function ExpenseManagementView({
                       <tr key={exp.id} className="hover:bg-neutral-900/40">
                         <td className="px-4 py-2.5 font-mono text-neutral-400">{exp.date}</td>
                         <td className="px-4 py-2.5 font-bold text-white">{exp.categoryName}</td>
-                        <td className="px-4 py-2.5 text-neutral-400 italic">{exp.note || '-'}</td>
+                        <td className="px-4 py-2.5 text-neutral-400 italic">{exp.description || '-'}</td>
                         <td className="px-4 py-2.5 text-right font-mono font-bold text-rose-400">{formatLira(exp.amount)}</td>
                         <td className="px-4 py-2.5 text-center">
                           <button
@@ -844,8 +844,8 @@ export default function ExpenseManagementView({
                   <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Özel Not / Açıklama</label>
                   <input
                     type="text"
-                    value={editNote}
-                    onChange={(e) => setEditNote(e.target.value)}
+                    value={editDesc}
+                    onChange={(e) => setEditDesc(e.target.value)}
                     className="w-full px-3 py-2 text-xs border border-neutral-800 rounded-xl bg-neutral-900 text-white focus:outline-none focus:border-indigo-500"
                   />
                 </div>
@@ -951,7 +951,7 @@ export default function ExpenseManagementView({
                         <tr key={exp.id} className="hover:bg-neutral-900/40 transition-colors">
                           <td className="px-5 py-3 font-mono font-semibold text-neutral-400">{exp.date}</td>
                           <td className="px-4 py-3 font-bold text-white">{exp.categoryName}</td>
-                          <td className="px-4 py-3 text-neutral-400 font-medium">{exp.note || <span className="text-neutral-600 italic">Not yok</span>}</td>
+                          <td className="px-4 py-3 text-neutral-400 font-medium">{exp.description || <span className="text-neutral-600 italic">Not yok</span>}</td>
                           <td className="px-4 py-3 text-right font-mono font-bold text-rose-400">{formatLira(exp.amount)}</td>
                           <td className="px-5 py-3 text-center">
                             <div className="flex items-center justify-center gap-1.5">

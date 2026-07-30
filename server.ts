@@ -273,18 +273,48 @@ async function startServer() {
       if (firms) {
         db.prepare("DELETE FROM firms").run();
         const stmt = db.prepare("INSERT INTO firms (id, name, isVatIncluded, invoiceType, taxNumber, address, pricingModel, healthDataFee, employeeCount, parentFirmId, serviceType, hazardClass) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        firms.forEach((f: any) => stmt.run(f.id, f.name, f.isVatIncluded ? 1 : 0, f.invoiceType, f.taxNumber, f.address, JSON.stringify(f.pricingModel), f.healthDataFee, f.employeeCount, f.parentFirmId, f.serviceType, f.hazardClass));
+        firms.forEach((f: any) => stmt.run(f.id, f.name, f.isVatIncluded ? 1 : 0, f.invoiceType, f.taxNumber ?? null, f.address ?? null, JSON.stringify(f.pricingModel), f.healthDataFee ?? 0, f.employeeCount ?? 0, f.parentFirmId ?? null, f.serviceType ?? 'both', f.hazardClass ?? null));
       }
       if (invoices) {
         db.prepare("DELETE FROM invoices").run();
         const stmt = db.prepare("INSERT INTO invoices (id, firmId, firmName, invoiceType, date, employeeCount, baseAmount, healthAmount, totalAmount, isVatIncluded, status, specialistFee, doctorFee, vatRate, vatAmount, isApproved, approvalDate, paymentDate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        invoices.forEach((i: any) => stmt.run(i.id, i.firmId, i.firmName, i.invoiceType, i.date, i.employeeCount, i.baseAmount, i.healthAmount, i.totalAmount, i.isVatIncluded ? 1 : 0, i.status, i.specialistFee, i.doctorFee, i.vatRate, i.vatAmount, i.isApproved ? 1 : 0, i.approvalDate, i.paymentDate));
+        invoices.forEach((i: any) => stmt.run(i.id, i.firmId, i.firmName, i.invoiceType, i.date, i.employeeCount ?? 0, i.baseAmount ?? 0, i.healthAmount ?? 0, i.totalAmount ?? 0, i.isVatIncluded ? 1 : 0, i.status ?? 'bekliyor', i.specialistFee ?? 0, i.doctorFee ?? 0, i.vatRate ?? 0, i.vatAmount ?? 0, i.isApproved ? 1 : 0, i.approvalDate ?? null, i.paymentDate ?? null));
       }
-      if (transactions) {
-        db.prepare("DELETE FROM transactions").run();
-        const stmt = db.prepare("INSERT INTO transactions (id, firmId, firmName, type, date, amount, description) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        transactions.forEach((t: any) => stmt.run(t.id, t.firmId, t.firmName, t.type, t.date, t.amount, t.description));
-      }
+        if (transactions) {
+          db.prepare("DELETE FROM transactions").run();
+          const firmRows = db.prepare("SELECT id, name FROM firms").all();
+          const firmMap = firmRows.reduce((acc: any, f: any) => ({...acc, [f.id]: f.name}), {});
+
+          const stmt = db.prepare("INSERT INTO transactions (id, firmId, firmName, type, date, amount, description) VALUES (?, ?, ?, ?, ?, ?, ?)");
+          transactions.forEach((t: any) => {
+            let newType = t.type;
+            let newAmount = t.amount ?? 0;
+            let dateStr = t.date;
+            
+            // Migrate legacy data
+            if (t.type === 'FATURA') {
+              newType = 'invoice';
+              newAmount = t.debt ?? newAmount;
+            } else if (String(t.type).toUpperCase().includes('TAHS') || t.credit > 0) {
+              newType = 'payment';
+              newAmount = t.credit ?? newAmount;
+            } else if (t.type === 'DEVİR' || t.type === 'BORÇ' || t.type === 'DEVR' || t.type === 'BOR') {
+              newType = 'debt_addition';
+              newAmount = t.debt ?? newAmount;
+            } else if (newType !== 'invoice' && newType !== 'payment' && newType !== 'debt_addition') {
+              newType = 'debt_addition';
+            }
+
+            // Normalize Date
+            if (dateStr && dateStr.includes('T')) {
+              dateStr = dateStr.split('T')[0];
+            }
+
+            const fname = t.firmName || firmMap[t.firmId] || 'Bilinmiyor';
+
+            stmt.run(t.id, t.firmId, fname, newType, dateStr, newAmount, t.description ?? '');
+          });
+        }
       if (categories) {
         db.prepare("DELETE FROM categories").run();
         const stmt = db.prepare("INSERT INTO categories (id, name) VALUES (?, ?)");
@@ -293,7 +323,7 @@ async function startServer() {
       if (expenses) {
         db.prepare("DELETE FROM expenses").run();
         const stmt = db.prepare("INSERT INTO expenses (id, date, categoryId, amount, description, paymentMethod, documentNumber, isTaxDeductible, taxRate, taxAmount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        expenses.forEach((e: any) => stmt.run(e.id, e.date, e.categoryId, e.amount, e.description, e.paymentMethod, e.documentNumber, e.isTaxDeductible ? 1 : 0, e.taxRate, e.taxAmount));
+        expenses.forEach((e: any) => stmt.run(e.id, e.date, e.categoryId, e.amount, e.description ?? '', e.paymentMethod ?? null, e.documentNumber ?? null, e.isTaxDeductible ? 1 : 0, e.taxRate ?? null, e.taxAmount ?? null));
       }
       if (settings) {
         db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('global', ?)").run(JSON.stringify(settings));

@@ -95,7 +95,7 @@ export interface Expense {
   categoryName: string;
   date: string; // YYYY-MM-DD
   amount: number;
-  note: string;
+  description: string;
 }
 
 export interface SystemSettings {
