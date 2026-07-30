@@ -945,7 +945,7 @@ export default function App() {
               <span>Ayarlar</span>
             </button>
             <button
-              onClick={() => { setShowSettingsModal(true); setMobileMenuOpen(false); }}
+              onClick={() => { window.location.reload(); }}
               className="py-2 px-2 bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <RefreshCw className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
